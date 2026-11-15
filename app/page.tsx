@@ -30,7 +30,8 @@ const labelClassName =
   "block text-[15px] font-medium tracking-tight text-[#1d1d1f] sm:text-sm";
 
 export default function Home() {
-  const [date, setDate] = useState(todayString);
+  // 빌드(프리렌더) 중 new Date() 호출을 피하기 위해 빈 값으로 시작
+  const [date, setDate] = useState("");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -39,6 +40,8 @@ export default function Home() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    // 브라우저에서만 오늘 날짜를 채움 (Vercel 빌드 오류 방지)
+    setDate(todayString());
     void loadExpenses();
   }, []);
 
