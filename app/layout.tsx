@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { GoogleProvider } from "@/components/GoogleProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "나의 AI 가계부",
-  description: "날짜, 금액, 내용으로 지출을 기록하는 간단한 가계부",
+  title: "AI 가계부 챗봇",
+  description: "대화하듯 지출을 기록하는 AI 가계부",
 };
 
 /** 모바일에서 화면 너비에 맞게 보이도록 설정 */
@@ -30,7 +31,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="ko"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body className="min-h-full flex flex-col font-sans">
+        <GoogleProvider>{children}</GoogleProvider>
+      </body>
     </html>
   );
 }

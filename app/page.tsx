@@ -1,7 +1,18 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { AppMenu } from "@/components/AppMenu";
+import { CATEGORY_TREE, type Category } from "@/lib/categories";
+import { koreaToday } from "@/lib/date";
+import {
+  formatMonthLabel,
+  listMonths,
+  summarizeByCategory,
+  summarizeByMonth,
+} from "@/lib/reports";
 import { supabase } from "@/lib/supabase";
+
+type AppTab = "chat" | "monthly" | "category";
 
 /** expenses 테이블 한 행 */
 type Expense = {
@@ -10,223 +21,782 @@ type Expense = {
   date: string;
   amount: number;
   description: string;
+  category: string | null;
+  subcategory: string | null;
 };
 
-/** 오늘 날짜를 YYYY-MM-DD 형식으로 반환 */
-function todayString() {
-  return new Date().toISOString().slice(0, 10);
-}
+type ChatRole = "user" | "assistant";
 
-/** 금액 숫자만 (원화 기호는 UI에서 분리 표시) */
+type ChatMessage = {
+  id: string;
+  role: ChatRole;
+  content: string;
+};
+
+type EditForm = {
+  date: string;
+  amount: string;
+  description: string;
+  category: Category;
+  subcategory: string;
+};
+
+const CATEGORY_OPTIONS = Object.keys(CATEGORY_TREE) as Category[];
+
+/** 금액 천단위 콤마 */
 function formatAmount(amount: number) {
   return new Intl.NumberFormat("ko-KR").format(amount);
 }
 
-/** 미니멀 입력 필드 — 테두리 없이 배경 차이만 */
-const fieldClassName =
-  "w-full min-h-14 rounded-xl bg-[#f5f5f7] px-4 py-3.5 text-lg text-[#1d1d1f] outline-none transition placeholder:text-[#86868b] focus:bg-[#ebebed] sm:min-h-12 sm:text-[15px]";
+function createMessageId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
 
-const labelClassName =
-  "block text-[15px] font-medium tracking-tight text-[#1d1d1f] sm:text-sm";
+function formatCategoryLabel(item: Expense) {
+  if (item.category && item.subcategory) {
+    return `${item.category} · ${item.subcategory}`;
+  }
+  if (item.category) return item.category;
+  return null;
+}
+
+function defaultEditForm(item: Expense): EditForm {
+  const category =
+    item.category && item.category in CATEGORY_TREE
+      ? (item.category as Category)
+      : "기타";
+  const subs = CATEGORY_TREE[category] as readonly string[];
+  const subcategory =
+    item.subcategory && subs.includes(item.subcategory)
+      ? item.subcategory
+      : subs[0];
+
+  return {
+    date: item.date,
+    amount: String(item.amount),
+    description: item.description,
+    category,
+    subcategory,
+  };
+}
+
+const fieldClassName =
+  "w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[14px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]";
 
 export default function Home() {
-  // 빌드(프리렌더) 중 new Date() 호출을 피하기 위해 빈 값으로 시작
-  const [date, setDate] = useState("");
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [loadingExpenses, setLoadingExpenses] = useState(true);
+  const [expenseError, setExpenseError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<EditForm | null>(null);
+
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: "welcome",
+      role: "assistant",
+      content:
+        "안녕하세요! 지출을 대화처럼 말해 주세요.\n예: “오늘 점심 12,000원”, “택시 2만 원”\n자동으로 대·소분류까지 저장해요.",
+    },
+  ]);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [tab, setTab] = useState<AppTab>("chat");
+  const [reportMonth, setReportMonth] = useState("");
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const editSubOptions = useMemo(() => {
+    if (!editForm) return [] as readonly string[];
+    return CATEGORY_TREE[editForm.category];
+  }, [editForm]);
+
+  const monthlyTotals = useMemo(
+    () => summarizeByMonth(expenses),
+    [expenses],
+  );
+
+  const availableMonths = useMemo(() => listMonths(expenses), [expenses]);
+
+  const categoryTotals = useMemo(() => {
+    if (!reportMonth) return [];
+    return summarizeByCategory(expenses, reportMonth);
+  }, [expenses, reportMonth]);
+
+  const categoryMonthTotal = useMemo(
+    () => categoryTotals.reduce((sum, row) => sum + row.total, 0),
+    [categoryTotals],
+  );
 
   useEffect(() => {
-    // 브라우저에서만 오늘 날짜를 채움 (Vercel 빌드 오류 방지)
-    setDate(todayString());
     void loadExpenses();
   }, []);
 
-  async function loadExpenses() {
-    setLoading(true);
-    setErrorMessage(null);
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, sending]);
 
-    const { data, error } = await supabase
-      .from("expenses")
-      .select("id, created_at, date, amount, description")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      setErrorMessage(error.message);
-      setExpenses([]);
-    } else {
-      setExpenses((data as Expense[]) ?? []);
-    }
-
-    setLoading(false);
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const parsedAmount = Number(amount.replace(/,/g, ""));
-    if (!date || !description.trim() || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+  // 데이터가 바뀌면 리포트용 월 기본값을 최신 월로 맞춤
+  useEffect(() => {
+    if (availableMonths.length === 0) {
+      setReportMonth("");
       return;
     }
+    if (!reportMonth || !availableMonths.includes(reportMonth)) {
+      setReportMonth(availableMonths[0]);
+    }
+  }, [availableMonths, reportMonth]);
 
-    setSaving(true);
-    setErrorMessage(null);
+  async function loadExpenses() {
+    setLoadingExpenses(true);
+    setExpenseError(null);
 
+    try {
+      const { data, error } = await supabase
+        .from("expenses")
+        .select(
+          "id, created_at, date, amount, description, category, subcategory",
+        )
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        setExpenseError(error.message);
+        setExpenses([]);
+      } else {
+        setExpenses((data as Expense[]) ?? []);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "지출 내역을 불러오지 못했어요.";
+      setExpenseError(message);
+      setExpenses([]);
+    } finally {
+      setLoadingExpenses(false);
+    }
+  }
+
+  async function saveExpense(expense: {
+    date: string;
+    amount: number;
+    description: string;
+    category: string;
+    subcategory: string;
+  }) {
     const { data, error } = await supabase
       .from("expenses")
       .insert({
-        date,
-        amount: parsedAmount,
-        description: description.trim(),
+        date: expense.date,
+        amount: expense.amount,
+        description: expense.description,
+        category: expense.category,
+        subcategory: expense.subcategory,
       })
-      .select("id, created_at, date, amount, description")
+      .select(
+        "id, created_at, date, amount, description, category, subcategory",
+      )
       .single();
 
     if (error) {
-      setErrorMessage(error.message);
-      setSaving(false);
-      return;
+      setExpenseError(error.message);
+      return false;
     }
 
     setExpenses((prev) => [data as Expense, ...prev]);
-    setAmount("");
-    setDescription("");
-    setDate(todayString());
-    setSaving(false);
+    setExpenseError(null);
+    return true;
+  }
+
+  function toggleSelect(id: number) {
+    // 수정 중이면 행 전환으로 폼을 닫지 않음
+    if (editingId !== null) return;
+    setSelectedId((prev) => (prev === id ? null : id));
+  }
+
+  function startEdit(item: Expense) {
+    setSelectedId(item.id);
+    setEditingId(item.id);
+    setEditForm(defaultEditForm(item));
+    setExpenseError(null);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditForm(null);
+  }
+
+  function updateEditCategory(category: Category) {
+    const subs = CATEGORY_TREE[category];
+    setEditForm((prev) =>
+      prev
+        ? {
+            ...prev,
+            category,
+            subcategory: subs[0],
+          }
+        : prev,
+    );
+  }
+
+  async function handleUpdate(id: number) {
+    if (!editForm) return;
+
+    const amount = Number(editForm.amount.replace(/,/g, ""));
+    const description = editForm.description.trim();
+    if (
+      !editForm.date ||
+      !description ||
+      Number.isNaN(amount) ||
+      amount <= 0
+    ) {
+      setExpenseError("날짜, 금액, 내용을 확인해 주세요.");
+      return;
+    }
+
+    setBusyId(id);
+    setExpenseError(null);
+
+    const { data, error } = await supabase
+      .from("expenses")
+      .update({
+        date: editForm.date,
+        amount: Math.round(amount),
+        description,
+        category: editForm.category,
+        subcategory: editForm.subcategory,
+      })
+      .eq("id", id)
+      .select(
+        "id, created_at, date, amount, description, category, subcategory",
+      )
+      .single();
+
+    setBusyId(null);
+
+    if (error) {
+      setExpenseError(error.message);
+      return;
+    }
+
+    setExpenses((prev) =>
+      prev.map((item) => (item.id === id ? (data as Expense) : item)),
+    );
+    cancelEdit();
+  }
+
+  async function handleDelete(item: Expense) {
+    const label = `${item.description} ${formatAmount(item.amount)}원`;
+    if (!window.confirm(`"${label}" 내역을 삭제할까요?`)) {
+      return;
+    }
+
+    setBusyId(item.id);
+    setExpenseError(null);
+
+    const { error } = await supabase.from("expenses").delete().eq("id", item.id);
+
+    setBusyId(null);
+
+    if (error) {
+      setExpenseError(error.message);
+      return;
+    }
+
+    setExpenses((prev) => prev.filter((row) => row.id !== item.id));
+    if (editingId === item.id) {
+      cancelEdit();
+    }
+    if (selectedId === item.id) {
+      setSelectedId(null);
+    }
+  }
+
+  async function handleSend(event?: FormEvent) {
+    event?.preventDefault();
+
+    const text = input.trim();
+    if (!text || sending) return;
+
+    const userMessage: ChatMessage = {
+      id: createMessageId(),
+      role: "user",
+      content: text,
+    };
+
+    const historyForApi = [...messages, userMessage]
+      .filter((m) => m.id !== "welcome")
+      .map(({ role, content }) => ({ role, content }));
+
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    setSending(true);
+    setChatError(null);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          history: historyForApi.slice(0, -1),
+        }),
+      });
+
+      const data = (await response.json()) as {
+        reply?: string;
+        expense?: {
+          date: string;
+          amount: number;
+          description: string;
+          category: string;
+          subcategory: string;
+        } | null;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ?? "AI 응답에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        );
+      }
+
+      let reply = data.reply?.trim() || "네, 말씀해 주세요.";
+
+      if (data.expense) {
+        const saved = await saveExpense(data.expense);
+        if (!saved) {
+          reply =
+            "내용은 파악했지만 저장에 실패했어요. Supabase에 category 컬럼이 추가됐는지 확인해 주세요.";
+        }
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: createMessageId(),
+          role: "assistant",
+          content: reply,
+        },
+      ]);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "전송에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+      setChatError(message);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: createMessageId(),
+          role: "assistant",
+          content: message,
+        },
+      ]);
+    } finally {
+      setSending(false);
+      inputRef.current?.focus();
+    }
   }
 
   const total = expenses.reduce((sum, item) => sum + item.amount, 0);
 
+  const tabTitle =
+    tab === "chat" ? "AI 가계부 챗봇" : tab === "monthly" ? "월별 지출" : "카테고리별 지출";
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#f5f5f7]">
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-5 py-12 sm:px-6 sm:py-16">
-        {/* 타이포그래피 중심 헤더 */}
-        <header className="mb-12 sm:mb-14">
-          <p className="mb-3 text-[13px] font-medium tracking-[0.04em] text-[#86868b]">
-            Account Book
-          </p>
-          <h1 className="text-[2rem] font-semibold leading-tight tracking-tight text-[#1d1d1f] sm:text-[2.25rem]">
-            나의 AI 가계부
+      <div className="mx-auto flex h-[100dvh] w-full max-w-md flex-col">
+        {/* 상단 제목 + 메뉴 */}
+        <header className="relative shrink-0 border-b border-black/5 bg-white px-5 py-4">
+          <h1 className="text-center text-[17px] font-semibold tracking-tight text-[#1d1d1f]">
+            {tabTitle}
           </h1>
-          <p className="mt-3 text-[15px] leading-relaxed text-[#86868b] sm:text-sm">
-            오늘의 지출을 기록해보세요.
-          </p>
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            <AppMenu expenses={expenses} />
+          </div>
         </header>
 
-        {/* 입력 영역 — 흰 표면, 테두리/그림자 없음 */}
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-8 rounded-2xl bg-white px-5 py-7 sm:space-y-6 sm:px-6 sm:py-8"
-        >
-          <div className="space-y-2.5">
-            <label htmlFor="date" className={labelClassName}>
-              날짜
-            </label>
-            <input
-              id="date"
-              type="date"
-              required
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className={fieldClassName}
-            />
-          </div>
-
-          <div className="space-y-2.5">
-            <label htmlFor="amount" className={labelClassName}>
-              금액
-            </label>
-            <input
-              id="amount"
-              type="number"
-              inputMode="numeric"
-              min="1"
-              step="1"
-              required
-              placeholder="12000"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className={`${fieldClassName} font-mono tabular-nums`}
-            />
-          </div>
-
-          <div className="space-y-2.5">
-            <label htmlFor="description" className={labelClassName}>
-              내용
-            </label>
-            <input
-              id="description"
-              type="text"
-              required
-              placeholder="점심 식사"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className={fieldClassName}
-            />
-          </div>
-
-          {/* Flat 버튼 — 강조색 하나(#1d1d1f), hover 시만 살짝 어두움 */}
-          <button
-            type="submit"
-            disabled={saving}
-            className="mt-2 w-full min-h-14 rounded-xl bg-[#1d1d1f] px-4 py-4 text-[17px] font-medium text-white transition-colors hover:bg-[#000000] disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-12 sm:py-3.5 sm:text-[15px]"
-          >
-            {saving ? "저장 중..." : "저장하기"}
-          </button>
-        </form>
-
-        {errorMessage && (
-          <p className="mt-6 text-[15px] leading-relaxed text-[#1d1d1f]/80">
-            {errorMessage}
-          </p>
-        )}
-
-        {/* 목록 — 여백으로 구분, 카드는 흰 배경만 */}
-        <section className="mt-14 sm:mt-16">
-          <div className="mb-6 flex items-baseline justify-between gap-4">
-            <h2 className="text-[15px] font-medium text-[#1d1d1f]">지출 내역</h2>
-            <p className="font-mono text-[15px] tabular-nums tracking-tight text-[#1d1d1f]">
-              <span className="mr-1 text-[13px] text-[#86868b]">합계</span>
-              {formatAmount(total)}
-              <span className="ml-0.5 text-[13px] text-[#86868b]">원</span>
+        {tab === "chat" && (
+          <>
+        {/* 저장된 지출 카드 */}
+        <section className="shrink-0 border-b border-black/5 bg-[#f5f5f7] px-4 py-3">
+          <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
+            <p className="text-[13px] font-medium text-[#86868b]">지출 내역</p>
+            <p className="font-mono text-[13px] tabular-nums text-[#1d1d1f]">
+              합계 {formatAmount(total)}
+              <span className="ml-0.5 text-[#86868b]">원</span>
             </p>
           </div>
 
-          {loading ? (
-            <p className="py-12 text-center text-[15px] text-[#86868b]">불러오는 중...</p>
+          {expenseError && (
+            <p className="mb-2 px-1 text-[13px] text-red-600">{expenseError}</p>
+          )}
+
+          {loadingExpenses ? (
+            <p className="rounded-2xl bg-white px-4 py-5 text-center text-[14px] text-[#86868b]">
+              불러오는 중...
+            </p>
           ) : expenses.length === 0 ? (
-            <p className="py-12 text-center text-[15px] text-[#86868b]">
+            <p className="rounded-2xl bg-white px-4 py-5 text-center text-[14px] text-[#86868b]">
               아직 저장된 내역이 없습니다.
             </p>
           ) : (
-            <ul className="space-y-3">
-              {expenses.map((item) => (
-                <li
-                  key={item.id}
-                  className="rounded-2xl bg-white px-5 py-5 sm:px-6 sm:py-5"
-                >
-                  <div className="flex items-start justify-between gap-6">
-                    <div className="min-w-0 pt-0.5">
-                      <p className="truncate text-[17px] font-medium tracking-tight text-[#1d1d1f] sm:text-[15px]">
-                        {item.description}
-                      </p>
-                      <p className="mt-1.5 text-[13px] text-[#86868b]">{item.date}</p>
-                    </div>
-                    {/* 금액: 숫자 폰트, 크고 명확하게 */}
-                    <p className="shrink-0 font-mono text-[1.35rem] font-medium tabular-nums tracking-tight text-[#1d1d1f] sm:text-xl">
-                      {formatAmount(item.amount)}
-                      <span className="ml-0.5 text-sm font-normal text-[#86868b]">원</span>
-                    </p>
-                  </div>
-                </li>
-              ))}
+            <ul className="flex max-h-52 flex-col gap-2 overflow-y-auto pr-1">
+              {expenses.map((item) => {
+                const categoryLabel = formatCategoryLabel(item);
+                const isEditing = editingId === item.id && editForm;
+                const isSelected = selectedId === item.id;
+                const isBusy = busyId === item.id;
+
+                return (
+                  <li
+                    key={item.id}
+                    className={`rounded-2xl bg-white px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${
+                      isSelected && !isEditing ? "ring-1 ring-black/10" : ""
+                    }`}
+                  >
+                    {isEditing ? (
+                      <div className="space-y-2.5">
+                        <input
+                          type="date"
+                          value={editForm.date}
+                          max={koreaToday()}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, date: e.target.value })
+                          }
+                          className={fieldClassName}
+                          disabled={isBusy}
+                          lang="ko-KR"
+                        />
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min="1"
+                          value={editForm.amount}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, amount: e.target.value })
+                          }
+                          className={`${fieldClassName} font-mono`}
+                          disabled={isBusy}
+                          placeholder="금액"
+                        />
+                        <input
+                          type="text"
+                          value={editForm.description}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              description: e.target.value,
+                            })
+                          }
+                          className={fieldClassName}
+                          disabled={isBusy}
+                          placeholder="내용"
+                        />
+                        <select
+                          value={editForm.category}
+                          onChange={(e) =>
+                            updateEditCategory(e.target.value as Category)
+                          }
+                          className={fieldClassName}
+                          disabled={isBusy}
+                        >
+                          {CATEGORY_OPTIONS.map((category) => (
+                            <option key={category} value={category}>
+                              {category}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={editForm.subcategory}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              subcategory: e.target.value,
+                            })
+                          }
+                          className={fieldClassName}
+                          disabled={isBusy}
+                        >
+                          {editSubOptions.map((sub) => (
+                            <option key={sub} value={sub}>
+                              {sub}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => void handleUpdate(item.id)}
+                            disabled={isBusy}
+                            className="flex-1 rounded-xl bg-[#1d1d1f] px-3 py-2.5 text-[13px] font-medium text-white disabled:opacity-40"
+                          >
+                            {isBusy ? "저장 중..." : "저장"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEdit}
+                            disabled={isBusy}
+                            className="flex-1 rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[13px] font-medium text-[#1d1d1f] disabled:opacity-40"
+                          >
+                            취소
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleSelect(item.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleSelect(item.id);
+                          }
+                        }}
+                        className="flex cursor-pointer items-center justify-between gap-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[15px] font-medium text-[#1d1d1f]">
+                            {item.description}
+                          </p>
+                          <p className="mt-0.5 text-[12px] text-[#86868b]">
+                            {item.date}
+                            {categoryLabel ? ` · ${categoryLabel}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <p className="font-mono text-[15px] font-medium tabular-nums text-[#1d1d1f]">
+                            {formatAmount(item.amount)}
+                            <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
+                              원
+                            </span>
+                          </p>
+                          {isSelected && (
+                            <div
+                              className="flex gap-1.5"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => startEdit(item)}
+                                disabled={isBusy || busyId !== null}
+                                className="rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[12px] font-medium text-[#1d1d1f] disabled:opacity-40"
+                              >
+                                수정
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleDelete(item)}
+                                disabled={isBusy || busyId !== null}
+                                className="rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[12px] font-medium text-[#b42318] disabled:opacity-40"
+                              >
+                                {isBusy ? "삭제 중..." : "삭제"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
-      </main>
+
+        {/* 대화 영역 */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <ul className="flex flex-col gap-3">
+            {messages.map((message) => (
+              <li
+                key={message.id}
+                className={`flex ${
+                  message.role === "user" ? "justify-end" : "justify-start"
+                }`}
+              >
+                <div
+                  className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[15px] leading-relaxed ${
+                    message.role === "user"
+                      ? "rounded-br-md bg-[#FEE500] text-[#191919]"
+                      : "rounded-bl-md bg-white text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                  }`}
+                >
+                  {message.content}
+                </div>
+              </li>
+            ))}
+
+            {sending && (
+              <li className="flex justify-start">
+                <div className="rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 text-[14px] text-[#86868b] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                  생각 중이에요. 잠시만 기다려 주세요...
+                </div>
+              </li>
+            )}
+          </ul>
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* 하단 입력 */}
+        <div className="shrink-0 border-t border-black/5 bg-white px-3 pt-3">
+          {chatError && (
+            <p className="mb-2 px-1 text-[12px] text-red-600">{chatError}</p>
+          )}
+          <form onSubmit={handleSend} className="flex items-end gap-2 pb-2">
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="예: 택시 20000원"
+              disabled={sending}
+              className="min-h-11 flex-1 rounded-2xl bg-[#f5f5f7] px-4 py-2.5 text-[15px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed] disabled:opacity-60"
+            />
+            <button
+              type="submit"
+              disabled={sending || !input.trim()}
+              className="min-h-11 shrink-0 rounded-2xl bg-[#1d1d1f] px-4 py-2.5 text-[14px] font-medium text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              전송
+            </button>
+          </form>
+        </div>
+          </>
+        )}
+
+        {tab === "monthly" && (
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            {loadingExpenses ? (
+              <p className="rounded-2xl bg-white px-4 py-8 text-center text-[14px] text-[#86868b]">
+                불러오는 중...
+              </p>
+            ) : monthlyTotals.length === 0 ? (
+              <p className="rounded-2xl bg-white px-4 py-8 text-center text-[14px] text-[#86868b]">
+                아직 집계할 내역이 없습니다.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {monthlyTotals.map((row) => (
+                  <li
+                    key={row.month}
+                    className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                  >
+                    <p className="text-[15px] font-medium text-[#1d1d1f]">
+                      {formatMonthLabel(row.month)}
+                    </p>
+                    <p className="font-mono text-[16px] font-medium tabular-nums text-[#1d1d1f]">
+                      {formatAmount(row.total)}
+                      <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
+                        원
+                      </span>
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {tab === "category" && (
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            {loadingExpenses ? (
+              <p className="rounded-2xl bg-white px-4 py-8 text-center text-[14px] text-[#86868b]">
+                불러오는 중...
+              </p>
+            ) : availableMonths.length === 0 ? (
+              <p className="rounded-2xl bg-white px-4 py-8 text-center text-[14px] text-[#86868b]">
+                아직 집계할 내역이 없습니다.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">
+                    조회 월
+                  </span>
+                  <select
+                    value={reportMonth}
+                    onChange={(e) => setReportMonth(e.target.value)}
+                    className={fieldClassName}
+                  >
+                    {availableMonths.map((month) => (
+                      <option key={month} value={month}>
+                        {formatMonthLabel(month)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="flex items-baseline justify-between px-1">
+                  <p className="text-[13px] text-[#86868b]">이번 달 합계</p>
+                  <p className="font-mono text-[15px] tabular-nums text-[#1d1d1f]">
+                    {formatAmount(categoryMonthTotal)}
+                    <span className="ml-0.5 text-[12px] text-[#86868b]">원</span>
+                  </p>
+                </div>
+
+                {categoryTotals.length === 0 ? (
+                  <p className="rounded-2xl bg-white px-4 py-8 text-center text-[14px] text-[#86868b]">
+                    이 달 내역이 없습니다.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {categoryTotals.map((row) => (
+                      <li
+                        key={row.category}
+                        className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                      >
+                        <p className="text-[15px] font-medium text-[#1d1d1f]">
+                          {row.category}
+                        </p>
+                        <p className="font-mono text-[16px] font-medium tabular-nums text-[#1d1d1f]">
+                          {formatAmount(row.total)}
+                          <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
+                            원
+                          </span>
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 하단 메뉴 */}
+        <nav className="shrink-0 border-t border-black/5 bg-white px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
+          <div className="grid grid-cols-3 gap-1">
+            {(
+              [
+                { id: "chat", label: "채팅" },
+                { id: "monthly", label: "월별" },
+                { id: "category", label: "분류" },
+              ] as const
+            ).map((item) => {
+              const active = tab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setTab(item.id)}
+                  className={`rounded-xl px-2 py-2.5 text-[13px] font-medium transition-colors ${
+                    active
+                      ? "bg-[#1d1d1f] text-white"
+                      : "bg-transparent text-[#86868b]"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      </div>
     </div>
   );
 }
