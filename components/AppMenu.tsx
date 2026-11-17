@@ -17,9 +17,16 @@ import {
 type AppMenuProps = {
   expenses: ExcelExpenseRow[];
   onOpenCategoryEditor?: () => void;
+  accountEmail?: string | null;
+  onSignOut?: () => void;
 };
 
-export function AppMenu({ expenses, onOpenCategoryEditor }: AppMenuProps) {
+export function AppMenu({
+  expenses,
+  onOpenCategoryEditor,
+  accountEmail,
+  onSignOut,
+}: AppMenuProps) {
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   if (!clientId) {
     return (
@@ -27,6 +34,8 @@ export function AppMenu({ expenses, onOpenCategoryEditor }: AppMenuProps) {
         expenses={expenses}
         googleEnabled={false}
         onOpenCategoryEditor={onOpenCategoryEditor}
+        accountEmail={accountEmail}
+        onSignOut={onSignOut}
       />
     );
   }
@@ -34,11 +43,18 @@ export function AppMenu({ expenses, onOpenCategoryEditor }: AppMenuProps) {
     <MenuWithGoogle
       expenses={expenses}
       onOpenCategoryEditor={onOpenCategoryEditor}
+      accountEmail={accountEmail}
+      onSignOut={onSignOut}
     />
   );
 }
 
-function MenuWithGoogle({ expenses, onOpenCategoryEditor }: AppMenuProps) {
+function MenuWithGoogle({
+  expenses,
+  onOpenCategoryEditor,
+  accountEmail,
+  onSignOut,
+}: AppMenuProps) {
   const [session, setSession] = useState<GoogleSession | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -99,6 +115,8 @@ function MenuWithGoogle({ expenses, onOpenCategoryEditor }: AppMenuProps) {
       setSession={setSession}
       onConnectGoogle={() => login()}
       onOpenCategoryEditor={onOpenCategoryEditor}
+      accountEmail={accountEmail}
+      onSignOut={onSignOut}
     />
   );
 }
@@ -114,6 +132,8 @@ function MenuPanel({
   setSession: setSessionProp,
   onConnectGoogle,
   onOpenCategoryEditor,
+  accountEmail,
+  onSignOut,
 }: AppMenuProps & {
   googleEnabled: boolean;
   session?: GoogleSession | null;
@@ -233,7 +253,12 @@ function MenuPanel({
         <div className="absolute right-0 top-11 z-50 w-64 overflow-hidden rounded-2xl border border-black/5 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
           <div className="border-b border-black/5 px-3 py-2.5">
             <p className="text-[12px] text-[#86868b]">
-              {session ? `연결: ${session.email}` : "구글 계정 미연결"}
+              {accountEmail
+                ? `로그인: ${accountEmail}`
+                : "가계부 미로그인"}
+            </p>
+            <p className="mt-0.5 text-[11px] text-[#aeaeb2]">
+              {session ? `Gmail: ${session.email}` : "구글 메일 미연결"}
             </p>
           </div>
           <ul className="py-1">
@@ -291,6 +316,21 @@ function MenuPanel({
                 </button>
               )}
             </li>
+            {onSignOut && (
+              <li>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setOpen(false);
+                    onSignOut();
+                  }}
+                  className="w-full px-3 py-2.5 text-left text-[14px] text-[#b42318] hover:bg-[#f5f5f7] disabled:opacity-40"
+                >
+                  로그아웃
+                </button>
+              </li>
+            )}
           </ul>
           {status && (
             <p className="border-t border-black/5 px-3 py-2 text-[12px] leading-relaxed text-[#86868b]">

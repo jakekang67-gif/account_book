@@ -2,8 +2,10 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AppMenu } from "@/components/AppMenu";
+import { useAuth } from "@/components/AuthProvider";
 import { CategoryEditor } from "@/components/CategoryEditor";
 import { CategoryPieChart } from "@/components/CategoryPieChart";
+import { LoginForm } from "@/components/LoginForm";
 import { MonthlyBarChart } from "@/components/MonthlyBarChart";
 import { ReceiptUploadButton } from "@/components/ReceiptUploadButton";
 import { VoiceMicButton } from "@/components/VoiceMicButton";
@@ -187,6 +189,7 @@ const fieldClassName =
   "w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[14px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]";
 
 export default function Home() {
+  const { user, loading: authLoading, signOut } = useAuth();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loadingExpenses, setLoadingExpenses] = useState(true);
   const [expenseError, setExpenseError] = useState<string | null>(null);
@@ -252,9 +255,17 @@ export default function Home() {
   );
 
   useEffect(() => {
+    if (!user) {
+      setExpenses([]);
+      setCategoryRows([]);
+      setCategoryTree(DEFAULT_CATEGORY_TREE);
+      setLoadingExpenses(false);
+      setCategoryLoadError(null);
+      return;
+    }
     void loadExpenses();
     void refreshCategories();
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     // 환영 안내만 있을 때는 맨 위가 보이도록 (모바일에서 잘림 방지)
@@ -772,6 +783,18 @@ export default function Home() {
   const tabTitle =
     tab === "chat" ? "AI 가계부 챗봇" : tab === "monthly" ? "월별 지출" : "카테고리별 지출";
 
+  if (authLoading) {
+    return (
+      <div className="flex min-h-[100dvh] flex-1 items-center justify-center bg-[#f5f5f7] text-[14px] text-[#86868b]">
+        불러오는 중...
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginForm />;
+  }
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#f5f5f7]">
       <div className="mx-auto flex h-[100dvh] w-full max-w-md flex-col">
@@ -784,6 +807,8 @@ export default function Home() {
             <AppMenu
               expenses={expenses}
               onOpenCategoryEditor={() => setCategoryEditorOpen(true)}
+              accountEmail={user.email}
+              onSignOut={() => void signOut()}
             />
           </div>
         </header>
