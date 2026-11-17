@@ -89,7 +89,6 @@ export function ReceiptUploadButton({
         ref={inputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         className="hidden"
         disabled={disabled || busy}
         onChange={(e) => void handleChange(e.target.files?.[0] ?? null)}
