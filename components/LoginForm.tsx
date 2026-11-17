@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { getRememberLogin, getSavedEmail } from "@/lib/authStorage";
 
 type Mode = "login" | "signup";
 
@@ -11,8 +12,14 @@ export function LoginForm() {
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEmail(getSavedEmail());
+    setRememberMe(getRememberLogin());
+  }, []);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -26,8 +33,8 @@ export function LoginForm() {
     setMessage(null);
     const error =
       mode === "login"
-        ? await signIn(trimmed, password)
-        : await signUp(trimmed, password);
+        ? await signIn(trimmed, password, rememberMe)
+        : await signUp(trimmed, password, rememberMe);
     setBusy(false);
 
     if (error) {
@@ -77,7 +84,7 @@ export function LoginForm() {
             </span>
             <input
               type="email"
-              autoComplete="email"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={busy}
@@ -100,6 +107,19 @@ export function LoginForm() {
               className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]"
               placeholder="6자 이상"
             />
+          </label>
+
+          <label className="flex items-center gap-2 px-0.5 py-1">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              disabled={busy}
+              className="h-4 w-4 rounded border-black/20"
+            />
+            <span className="text-[13px] text-[#424245]">
+              로그인 상태 유지 (다음에도 자동 로그인)
+            </span>
           </label>
 
           {message && (
