@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type ReceiptUploadButtonProps = {
   disabled?: boolean;
@@ -54,17 +54,34 @@ async function compressImageFile(file: File): Promise<{
 
 /**
  * 영수증 사진 업로드 버튼.
- * 선택한 이미지를 압축한 뒤 onPick으로 넘깁니다.
+ * 촬영 / 갤러리 첨부를 선택해 이미지를 고른 뒤 onPick으로 넘깁니다.
  */
 export function ReceiptUploadButton({
   disabled,
   onPick,
   onError,
 }: ReceiptUploadButtonProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  async function handleChange(file: File | null) {
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [menuOpen]);
+
+  async function handleChange(
+    file: File | null,
+    input: HTMLInputElement | null,
+  ) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       onError?.("이미지 파일만 올릴 수 있어요.");
@@ -72,6 +89,7 @@ export function ReceiptUploadButton({
     }
 
     setBusy(true);
+    setMenuOpen(false);
     try {
       const payload = await compressImageFile(file);
       onPick(payload);
@@ -79,26 +97,46 @@ export function ReceiptUploadButton({
       onError?.("이미지를 읽지 못했어요. 다른 사진으로 시도해 주세요.");
     } finally {
       setBusy(false);
-      if (inputRef.current) inputRef.current.value = "";
+      if (input) input.value = "";
     }
   }
 
   return (
-    <>
+    <div className="relative" ref={rootRef}>
+      {/* 촬영 전용 */}
       <input
-        ref={inputRef}
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        disabled={disabled || busy}
+        onChange={(e) =>
+          void handleChange(e.target.files?.[0] ?? null, cameraInputRef.current)
+        }
+      />
+      {/* 갤러리·첨부 전용 */}
+      <input
+        ref={galleryInputRef}
         type="file"
         accept="image/*"
         className="hidden"
         disabled={disabled || busy}
-        onChange={(e) => void handleChange(e.target.files?.[0] ?? null)}
+        onChange={(e) =>
+          void handleChange(
+            e.target.files?.[0] ?? null,
+            galleryInputRef.current,
+          )
+        }
       />
+
       <button
         type="button"
         disabled={disabled || busy}
         aria-label="영수증 사진 올리기"
+        aria-expanded={menuOpen}
         title="영수증 사진 올리기"
-        onClick={() => inputRef.current?.click()}
+        onClick={() => setMenuOpen((prev) => !prev)}
         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#f5f5f7] text-[#1d1d1f] transition-colors hover:bg-[#ebebed] disabled:cursor-not-allowed disabled:opacity-35"
       >
         {busy ? (
@@ -115,6 +153,31 @@ export function ReceiptUploadButton({
           </svg>
         )}
       </button>
-    </>
+
+      {menuOpen && !busy && (
+        <div className="absolute bottom-12 left-0 z-40 w-40 overflow-hidden rounded-2xl border border-black/5 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+          <button
+            type="button"
+            className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
+            onClick={() => {
+              setMenuOpen(false);
+              cameraInputRef.current?.click();
+            }}
+          >
+            카메라 촬영
+          </button>
+          <button
+            type="button"
+            className="w-full border-t border-black/5 px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
+            onClick={() => {
+              setMenuOpen(false);
+              galleryInputRef.current?.click();
+            }}
+          >
+            앨범에서 선택
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
