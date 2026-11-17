@@ -16,17 +16,29 @@ import {
 
 type AppMenuProps = {
   expenses: ExcelExpenseRow[];
+  onOpenCategoryEditor?: () => void;
 };
 
-export function AppMenu({ expenses }: AppMenuProps) {
+export function AppMenu({ expenses, onOpenCategoryEditor }: AppMenuProps) {
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   if (!clientId) {
-    return <MenuPanel expenses={expenses} googleEnabled={false} />;
+    return (
+      <MenuPanel
+        expenses={expenses}
+        googleEnabled={false}
+        onOpenCategoryEditor={onOpenCategoryEditor}
+      />
+    );
   }
-  return <MenuWithGoogle expenses={expenses} />;
+  return (
+    <MenuWithGoogle
+      expenses={expenses}
+      onOpenCategoryEditor={onOpenCategoryEditor}
+    />
+  );
 }
 
-function MenuWithGoogle({ expenses }: AppMenuProps) {
+function MenuWithGoogle({ expenses, onOpenCategoryEditor }: AppMenuProps) {
   const [session, setSession] = useState<GoogleSession | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -86,6 +98,7 @@ function MenuWithGoogle({ expenses }: AppMenuProps) {
       setBusy={setBusy}
       setSession={setSession}
       onConnectGoogle={() => login()}
+      onOpenCategoryEditor={onOpenCategoryEditor}
     />
   );
 }
@@ -100,6 +113,7 @@ function MenuPanel({
   setBusy: setBusyProp,
   setSession: setSessionProp,
   onConnectGoogle,
+  onOpenCategoryEditor,
 }: AppMenuProps & {
   googleEnabled: boolean;
   session?: GoogleSession | null;
@@ -241,6 +255,19 @@ function MenuPanel({
                 className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
               >
                 메일로 보내기
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setOpen(false);
+                  onOpenCategoryEditor?.();
+                }}
+                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
+              >
+                카테고리 편집
               </button>
             </li>
             <li>

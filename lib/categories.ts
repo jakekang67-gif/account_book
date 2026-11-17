@@ -1,8 +1,11 @@
 /**
  * 가계부 대분류 → 소분류 목록
- * AI 분류와 UI에서 공통으로 사용합니다.
+ * DB에 값이 없을 때 기본값으로 사용합니다.
  */
-export const CATEGORY_TREE = {
+
+export type CategoryTree = Record<string, string[]>;
+
+export const DEFAULT_CATEGORY_TREE: CategoryTree = {
   식대: ["아침", "점심", "저녁", "야식", "회식", "기타식대"],
   차량유지: [
     "주유",
@@ -50,14 +53,16 @@ export const CATEGORY_TREE = {
   ],
   자기계발: ["도서", "강의", "자격증", "학원", "기타자기계발"],
   기타: ["수수료", "택배비", "소액기타", "미분류"],
-} as const;
+};
 
-export type Category = keyof typeof CATEGORY_TREE;
-export type Subcategory = (typeof CATEGORY_TREE)[Category][number];
+/** @deprecated DEFAULT_CATEGORY_TREE 사용 권장 */
+export const CATEGORY_TREE = DEFAULT_CATEGORY_TREE;
+
+export type Category = string;
 
 /** 프롬프트용 카테고리 텍스트 */
-export function formatCategoryTreeForPrompt() {
-  return Object.entries(CATEGORY_TREE)
+export function formatCategoryTreeForPrompt(tree: CategoryTree = DEFAULT_CATEGORY_TREE) {
+  return Object.entries(tree)
     .map(([category, subs]) => `- ${category}: ${subs.join(", ")}`)
     .join("\n");
 }
@@ -66,18 +71,47 @@ export function formatCategoryTreeForPrompt() {
 export function normalizeCategoryPair(
   categoryRaw: unknown,
   subcategoryRaw: unknown,
-): { category: Category; subcategory: string } | null {
-  const category = String(categoryRaw ?? "").trim() as Category;
+  tree: CategoryTree = DEFAULT_CATEGORY_TREE,
+): { category: string; subcategory: string } | null {
+  const category = String(categoryRaw ?? "").trim();
   const subcategory = String(subcategoryRaw ?? "").trim();
 
-  if (!(category in CATEGORY_TREE)) {
+  if (!category || !(category in tree)) {
     return null;
   }
 
-  const allowed = CATEGORY_TREE[category] as readonly string[];
+  const allowed = tree[category] ?? [];
   if (!allowed.includes(subcategory)) {
     return null;
   }
 
   return { category, subcategory };
+}
+
+/** DB 행 목록을 트리로 변환 */
+export function rowsToCategoryTree(
+  rows: Array<{ category: string; subcategory: string }>,
+): CategoryTree {
+  const tree: CategoryTree = {};
+  for (const row of rows) {
+    const category = row.category.trim();
+    const subcategory = row.subcategory.trim();
+    if (!category || !subcategory) continue;
+    if (!tree[category]) tree[category] = [];
+    if (!tree[category].includes(subcategory)) {
+      tree[category].push(subcategory);
+    }
+  }
+  return tree;
+}
+
+/** 트리를 DB insert용 행으로 변환 */
+export function categoryTreeToRows(tree: CategoryTree) {
+  const rows: Array<{ category: string; subcategory: string }> = [];
+  for (const [category, subs] of Object.entries(tree)) {
+    for (const subcategory of subs) {
+      rows.push({ category, subcategory });
+    }
+  }
+  return rows;
 }

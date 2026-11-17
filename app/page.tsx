@@ -2,7 +2,17 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AppMenu } from "@/components/AppMenu";
-import { CATEGORY_TREE, type Category } from "@/lib/categories";
+import { CategoryEditor } from "@/components/CategoryEditor";
+import {
+  DEFAULT_CATEGORY_TREE,
+  type Category,
+  type CategoryTree,
+} from "@/lib/categories";
+import {
+  loadCategoryTree,
+  type CategoryItemRow,
+} from "@/lib/categoryStore";
+import { detectChatIntent } from "@/lib/chatIntent";
 import { koreaToday } from "@/lib/date";
 import {
   formatMonthLabel,
@@ -41,11 +51,100 @@ type EditForm = {
   subcategory: string;
 };
 
-const CATEGORY_OPTIONS = Object.keys(CATEGORY_TREE) as Category[];
+type PendingExpense = {
+  date: string;
+  amount: number;
+  description: string;
+  category: string;
+  subcategory: string;
+};
+
+type PendingPhase = "confirm" | "await_category";
 
 /** 금액 천단위 콤마 */
 function formatAmount(amount: number) {
   return new Intl.NumberFormat("ko-KR").format(amount);
+}
+
+function formatSavedReply(expense: PendingExpense) {
+  const [, m, d] = expense.date.split("-");
+  const monthDay =
+    m && d ? `${Number(m)}월 ${Number(d)}일` : expense.date;
+  return `${monthDay} ${expense.category}(${expense.subcategory}) ${expense.description} ${formatAmount(expense.amount)}원을 저장했어요!`;
+}
+
+function formatAskConfirmReply(expense: PendingExpense) {
+  const [, m, d] = expense.date.split("-");
+  const monthDay =
+    m && d ? `${Number(m)}월 ${Number(d)}일` : expense.date;
+  return `${monthDay} ${expense.description} ${formatAmount(expense.amount)}원 — "${expense.category}-${expense.subcategory}"로 저장할까요?`;
+}
+
+/** 승인 의도 (네/응/저장 등) */
+function isAffirmative(text: string) {
+  const t = text.trim().toLowerCase().replace(/\s+/g, "");
+  return /^(네|녜|예|응|어|ㅇㅇ|ㅇㅋ|ok|okay|yes|y|좋아|좋아요|그래|그래요|맞아|맞아요|저장|저장해|저장해주세요|저장해줘|저장할게요|그렇게|그렇게해|그렇게해주세요|그렇게해줘|진행|진행해|진행해줘)$/i.test(
+    t,
+  );
+}
+
+/** 거절 의도 */
+function isNegative(text: string) {
+  const t = text.trim().toLowerCase().replace(/\s+/g, "");
+  return /^(아니|아니요|아뇨|ㄴㄴ|no|n|싫어|싫어요|다른거|다르게|틀려|틀렸어|아니야|취소)$/i.test(
+    t,
+  );
+}
+
+/** "가족-가족식대" / "가족 가족식대" 형태를 트리에서 찾기 */
+function parseCategoryFromText(
+  text: string,
+  tree: CategoryTree,
+): { category: string; subcategory: string } | null {
+  const raw = text.trim().replace(/\s+/g, " ");
+  if (!raw) return null;
+
+  const byDash = raw.split(/[-–—~/]/).map((s) => s.trim()).filter(Boolean);
+  if (byDash.length >= 2) {
+    const pair = normalizeLoosePair(byDash[0], byDash.slice(1).join(" "), tree);
+    if (pair) return pair;
+  }
+
+  const parts = raw.split(" ").filter(Boolean);
+  if (parts.length >= 2) {
+    const pair = normalizeLoosePair(parts[0], parts.slice(1).join(" "), tree);
+    if (pair) return pair;
+  }
+
+  // 대분류만 말한 경우 → 첫 소분류
+  for (const category of Object.keys(tree)) {
+    if (category === raw || category.replace(/\s+/g, "") === raw.replace(/\s+/g, "")) {
+      const subs = tree[category] ?? [];
+      if (subs[0]) return { category, subcategory: subs[0] };
+    }
+  }
+
+  return null;
+}
+
+function normalizeLoosePair(
+  categoryRaw: string,
+  subcategoryRaw: string,
+  tree: CategoryTree,
+): { category: string; subcategory: string } | null {
+  const catKey = Object.keys(tree).find(
+    (c) => c === categoryRaw || c.replace(/\s+/g, "") === categoryRaw.replace(/\s+/g, ""),
+  );
+  if (!catKey) return null;
+  const subs = tree[catKey] ?? [];
+  const sub =
+    subs.find(
+      (s) =>
+        s === subcategoryRaw ||
+        s.replace(/\s+/g, "") === subcategoryRaw.replace(/\s+/g, ""),
+    ) ?? null;
+  if (!sub) return null;
+  return { category: catKey, subcategory: sub };
 }
 
 function createMessageId() {
@@ -60,12 +159,12 @@ function formatCategoryLabel(item: Expense) {
   return null;
 }
 
-function defaultEditForm(item: Expense): EditForm {
+function defaultEditForm(item: Expense, tree: CategoryTree): EditForm {
+  const keys = Object.keys(tree);
+  const fallback = keys.includes("기타") ? "기타" : keys[0] ?? "기타";
   const category =
-    item.category && item.category in CATEGORY_TREE
-      ? (item.category as Category)
-      : "기타";
-  const subs = CATEGORY_TREE[category] as readonly string[];
+    item.category && item.category in tree ? item.category : fallback;
+  const subs = tree[category] ?? ["기타"];
   const subcategory =
     item.subcategory && subs.includes(item.subcategory)
       ? item.subcategory
@@ -97,22 +196,38 @@ export default function Home() {
       id: "welcome",
       role: "assistant",
       content:
-        "안녕하세요! 지출을 대화처럼 말해 주세요.\n예: “오늘 점심 12,000원”, “택시 2만 원”\n자동으로 대·소분류까지 저장해요.",
+        "안녕하세요! 지출을 대화처럼 말해 주세요.\n예: “오늘 점심 12,000원”, “택시 2만 원”\n분류를 제안하면, 승인하신 뒤에 저장해요.\n통계도 물어보세요. 예: “이번 달 총 지출이 얼마야?”",
     },
   ]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [pendingExpense, setPendingExpense] = useState<PendingExpense | null>(
+    null,
+  );
+  const [pendingPhase, setPendingPhase] = useState<PendingPhase | null>(null);
   const [tab, setTab] = useState<AppTab>("chat");
   const [reportMonth, setReportMonth] = useState("");
+  const [categoryTree, setCategoryTree] =
+    useState<CategoryTree>(DEFAULT_CATEGORY_TREE);
+  const [categoryRows, setCategoryRows] = useState<CategoryItemRow[]>([]);
+  const [categoryEditorOpen, setCategoryEditorOpen] = useState(false);
+  const [categoryLoadError, setCategoryLoadError] = useState<string | null>(
+    null,
+  );
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const categoryOptions = useMemo(
+    () => Object.keys(categoryTree),
+    [categoryTree],
+  );
+
   const editSubOptions = useMemo(() => {
     if (!editForm) return [] as readonly string[];
-    return CATEGORY_TREE[editForm.category];
-  }, [editForm]);
+    return categoryTree[editForm.category] ?? [];
+  }, [editForm, categoryTree]);
 
   const monthlyTotals = useMemo(
     () => summarizeByMonth(expenses),
@@ -133,6 +248,7 @@ export default function Home() {
 
   useEffect(() => {
     void loadExpenses();
+    void refreshCategories();
   }, []);
 
   useEffect(() => {
@@ -149,6 +265,13 @@ export default function Home() {
       setReportMonth(availableMonths[0]);
     }
   }, [availableMonths, reportMonth]);
+
+  async function refreshCategories() {
+    const result = await loadCategoryTree();
+    setCategoryTree(result.tree);
+    setCategoryRows(result.rows);
+    setCategoryLoadError(result.error);
+  }
 
   async function loadExpenses() {
     setLoadingExpenses(true);
@@ -220,7 +343,7 @@ export default function Home() {
   function startEdit(item: Expense) {
     setSelectedId(item.id);
     setEditingId(item.id);
-    setEditForm(defaultEditForm(item));
+    setEditForm(defaultEditForm(item, categoryTree));
     setExpenseError(null);
   }
 
@@ -230,7 +353,7 @@ export default function Home() {
   }
 
   function updateEditCategory(category: Category) {
-    const subs = CATEGORY_TREE[category];
+    const subs = categoryTree[category] ?? ["기타"];
     setEditForm((prev) =>
       prev
         ? {
@@ -315,6 +438,30 @@ export default function Home() {
     }
   }
 
+  function pushAssistant(content: string) {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: createMessageId(),
+        role: "assistant",
+        content,
+      },
+    ]);
+  }
+
+  async function commitPending(expense: PendingExpense) {
+    const saved = await saveExpense(expense);
+    if (!saved) {
+      pushAssistant(
+        "내용은 파악했지만 저장에 실패했어요. Supabase에 category 컬럼이 추가됐는지 확인해 주세요.",
+      );
+      return;
+    }
+    setPendingExpense(null);
+    setPendingPhase(null);
+    pushAssistant(formatSavedReply(expense));
+  }
+
   async function handleSend(event?: FormEvent) {
     event?.preventDefault();
 
@@ -327,34 +474,177 @@ export default function Home() {
       content: text,
     };
 
-    const historyForApi = [...messages, userMessage]
-      .filter((m) => m.id !== "welcome")
-      .map(({ role, content }) => ({ role, content }));
-
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setSending(true);
     setChatError(null);
 
     try {
+      // 저장 확인 중에도 통계 질문이면 대기 건을 취소하고 질문으로 처리
+      const earlyIntent = detectChatIntent(text);
+      if (
+        earlyIntent === "stats" &&
+        (pendingPhase === "confirm" || pendingPhase === "await_category")
+      ) {
+        setPendingExpense(null);
+        setPendingPhase(null);
+      }
+
+      // 1) 저장 확인 단계
+      if (
+        pendingPhase === "confirm" &&
+        pendingExpense &&
+        earlyIntent !== "stats"
+      ) {
+        if (isAffirmative(text)) {
+          await commitPending(pendingExpense);
+          return;
+        }
+        if (isNegative(text)) {
+          setPendingPhase("await_category");
+          pushAssistant(
+            "카테고리 분류 어떻게 할까요? 예: “가족-가족식대”, “식대-점심”",
+          );
+          return;
+        }
+        // 네/아니오가 아니면 대기 건을 취소하고 새 지출로 처리
+        setPendingExpense(null);
+        setPendingPhase(null);
+      }
+
+      // 2) 분류 다시 묻는 단계
+      if (
+        pendingPhase === "await_category" &&
+        pendingExpense &&
+        earlyIntent !== "stats"
+      ) {
+        const localPair = parseCategoryFromText(text, categoryTree);
+        if (localPair) {
+          const next: PendingExpense = {
+            ...pendingExpense,
+            category: localPair.category,
+            subcategory: localPair.subcategory,
+          };
+          setPendingExpense(next);
+          setPendingPhase("confirm");
+          pushAssistant(formatAskConfirmReply(next));
+          return;
+        }
+
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: text,
+            history: [],
+            categoryTree,
+            mode: "classify",
+            pendingExpense: {
+              date: pendingExpense.date,
+              amount: pendingExpense.amount,
+              description: pendingExpense.description,
+            },
+          }),
+        });
+
+        const data = (await response.json()) as {
+          reply?: string;
+          expense?: PendingExpense | null;
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(
+            data.error ?? "AI 응답에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+          );
+        }
+
+        if (data.expense) {
+          const next: PendingExpense = {
+            date: data.expense.date,
+            amount: data.expense.amount,
+            description: data.expense.description,
+            category: data.expense.category,
+            subcategory: data.expense.subcategory,
+          };
+          setPendingExpense(next);
+          setPendingPhase("confirm");
+          pushAssistant(
+            data.reply?.trim() || formatAskConfirmReply(next),
+          );
+          return;
+        }
+
+        pushAssistant(
+          data.reply?.trim() ||
+            "카테고리 분류 어떻게 할까요? 예: “가족-가족식대”",
+        );
+        return;
+      }
+
+      // 3) 통계 질문 vs 지출 입력
+      const intent = detectChatIntent(text);
+      const historyForApi = [...messages, userMessage]
+        .filter((m) => m.id !== "welcome")
+        .map(({ role, content }) => ({ role, content }));
+
+      if (intent === "stats") {
+        // 최신 지출을 Supabase에서 다시 가져와 Gemini에 전달
+        const { data: rows, error: fetchError } = await supabase
+          .from("expenses")
+          .select("date, amount, description, category, subcategory")
+          .order("date", { ascending: false });
+
+        if (fetchError) {
+          throw new Error(
+            `지출 데이터를 불러오지 못했어요: ${fetchError.message}`,
+          );
+        }
+
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: text,
+            history: historyForApi.slice(-6, -1),
+            mode: "stats",
+            expenses: rows ?? [],
+          }),
+        });
+
+        const data = (await response.json()) as {
+          reply?: string;
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(
+            data.error ?? "AI 응답에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+          );
+        }
+
+        pushAssistant(
+          data.reply?.trim() ||
+            "질문을 이해하지 못했어요. 예: “이번 달 총 지출이 얼마야?”",
+        );
+        return;
+      }
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
           history: historyForApi.slice(0, -1),
+          categoryTree,
+          mode: "extract",
         }),
       });
 
       const data = (await response.json()) as {
         reply?: string;
-        expense?: {
-          date: string;
-          amount: number;
-          description: string;
-          category: string;
-          subcategory: string;
-        } | null;
+        expense?: PendingExpense | null;
+        action?: string;
         error?: string;
       };
 
@@ -364,38 +654,28 @@ export default function Home() {
         );
       }
 
-      let reply = data.reply?.trim() || "네, 말씀해 주세요.";
-
       if (data.expense) {
-        const saved = await saveExpense(data.expense);
-        if (!saved) {
-          reply =
-            "내용은 파악했지만 저장에 실패했어요. Supabase에 category 컬럼이 추가됐는지 확인해 주세요.";
-        }
+        const next: PendingExpense = {
+          date: data.expense.date,
+          amount: data.expense.amount,
+          description: data.expense.description,
+          category: data.expense.category,
+          subcategory: data.expense.subcategory,
+        };
+        setPendingExpense(next);
+        setPendingPhase("confirm");
+        pushAssistant(data.reply?.trim() || formatAskConfirmReply(next));
+        return;
       }
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: createMessageId(),
-          role: "assistant",
-          content: reply,
-        },
-      ]);
+      pushAssistant(data.reply?.trim() || "네, 말씀해 주세요.");
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "전송에 실패했습니다. 잠시 후 다시 시도해 주세요.";
       setChatError(message);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: createMessageId(),
-          role: "assistant",
-          content: message,
-        },
-      ]);
+      pushAssistant(message);
     } finally {
       setSending(false);
       inputRef.current?.focus();
@@ -416,9 +696,20 @@ export default function Home() {
             {tabTitle}
           </h1>
           <div className="absolute right-3 top-1/2 -translate-y-1/2">
-            <AppMenu expenses={expenses} />
+            <AppMenu
+              expenses={expenses}
+              onOpenCategoryEditor={() => setCategoryEditorOpen(true)}
+            />
           </div>
         </header>
+
+        {categoryLoadError && (
+          <p className="bg-[#fff4e5] px-4 py-2 text-center text-[12px] text-[#8a6116]">
+            카테고리 DB 연결 확인: {categoryLoadError}
+            {" · "}
+            SQL로 category_items 테이블을 만들어 주세요.
+          </p>
+        )}
 
         {tab === "chat" && (
           <>
@@ -505,7 +796,7 @@ export default function Home() {
                           className={fieldClassName}
                           disabled={isBusy}
                         >
-                          {CATEGORY_OPTIONS.map((category) => (
+                          {categoryOptions.map((category) => (
                             <option key={category} value={category}>
                               {category}
                             </option>
@@ -797,6 +1088,14 @@ export default function Home() {
           </div>
         </nav>
       </div>
+
+      <CategoryEditor
+        open={categoryEditorOpen}
+        rows={categoryRows}
+        tree={categoryTree}
+        onClose={() => setCategoryEditorOpen(false)}
+        onChanged={refreshCategories}
+      />
     </div>
   );
 }
