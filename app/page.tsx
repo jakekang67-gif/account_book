@@ -200,7 +200,7 @@ export default function Home() {
       id: "welcome",
       role: "assistant",
       content:
-        "안녕하세요! 지출을 대화처럼 말해 주세요.\n예: “오늘 점심 12,000원”, “택시 2만 원”\n마이크·영수증 사진으로도 입력할 수 있어요.\n분류를 제안하면, 승인하신 뒤에 저장해요.\n통계도 물어보세요. 예: “이번 달 총 지출이 얼마야?”",
+        "안녕하세요! 지출을 말해 주세요.\n예: “오늘 점심 12,000원”\n마이크·영수증 사진도 가능해요.\n저장 전 분류를 확인받고, 통계도 물어보실 수 있어요.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -221,6 +221,7 @@ export default function Home() {
   );
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const categoryOptions = useMemo(
@@ -256,6 +257,13 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    // 환영 안내만 있을 때는 맨 위가 보이도록 (모바일에서 잘림 방지)
+    const onlyWelcome =
+      messages.length === 1 && messages[0]?.id === "welcome" && !sending;
+    if (onlyWelcome) {
+      chatScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sending]);
 
@@ -813,7 +821,7 @@ export default function Home() {
               아직 저장된 내역이 없습니다.
             </p>
           ) : (
-            <ul className="flex max-h-52 flex-col gap-2 overflow-y-auto pr-1">
+            <ul className="flex max-h-28 flex-col gap-2 overflow-y-auto pr-1 sm:max-h-40">
               {expenses.map((item) => {
                 const categoryLabel = formatCategoryLabel(item);
                 const isEditing = editingId === item.id && editForm;
@@ -978,7 +986,10 @@ export default function Home() {
         </section>
 
         {/* 대화 영역 */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <div
+          ref={chatScrollRef}
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+        >
           <ul className="flex flex-col gap-3">
             {messages.map((message) => (
               <li
@@ -988,7 +999,7 @@ export default function Home() {
                 }`}
               >
                 <div
-                  className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[15px] leading-relaxed ${
+                  className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-[15px] leading-relaxed ${
                     message.role === "user"
                       ? "rounded-br-md bg-[#FEE500] text-[#191919]"
                       : "rounded-bl-md bg-white text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
