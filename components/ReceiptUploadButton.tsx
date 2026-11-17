@@ -100,7 +100,7 @@ export function ReceiptUploadButton({
         aria-label="영수증 사진 올리기"
         title="영수증 사진 올리기"
         onClick={() => inputRef.current?.click()}
-        className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-2xl bg-[#f5f5f7] text-[#1d1d1f] transition-colors hover:bg-[#ebebed] disabled:cursor-not-allowed disabled:opacity-35"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#f5f5f7] text-[#1d1d1f] transition-colors hover:bg-[#ebebed] disabled:cursor-not-allowed disabled:opacity-35"
       >
         {busy ? (
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#86868b] border-t-transparent" />

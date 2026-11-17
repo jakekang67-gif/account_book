@@ -796,10 +796,11 @@ export default function Home() {
   }
 
   return (
-    <div className="flex min-h-full flex-1 flex-col bg-[#f5f5f7]">
-      <div className="mx-auto flex h-[100dvh] w-full max-w-md flex-col">
+    <div className="flex min-h-0 flex-1 flex-col bg-[#f5f5f7]">
+      {/* PWA/모바일: 화면 높이를 고정해 하단 전송·탭이 잘리지 않게 함 */}
+      <div className="mx-auto flex h-dvh max-h-dvh w-full max-w-md flex-col overflow-hidden pt-[env(safe-area-inset-top)]">
         {/* 상단 제목 + 메뉴 */}
-        <header className="relative shrink-0 border-b border-black/5 bg-white px-5 py-4">
+        <header className="relative shrink-0 border-b border-black/5 bg-white px-5 py-3 sm:py-4">
           <h1 className="text-center text-[17px] font-semibold tracking-tight text-[#1d1d1f]">
             {tabTitle}
           </h1>
@@ -1046,14 +1047,14 @@ export default function Home() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* 하단 입력 */}
-        <div className="shrink-0 border-t border-black/5 bg-white px-3 pt-3">
+        {/* 하단 입력 — 좁은 화면에서도 전송이 한 줄에 보이도록 */}
+        <div className="shrink-0 border-t border-black/5 bg-white px-2 pt-2 sm:px-3 sm:pt-3">
           {chatError && (
             <p className="mb-2 px-1 text-[12px] text-red-600">{chatError}</p>
           )}
           <form
             onSubmit={(e) => handleSend(e)}
-            className="flex items-end gap-2 pb-2"
+            className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-end gap-1.5 pb-2"
           >
             <ReceiptUploadButton
               disabled={sending}
@@ -1076,12 +1077,12 @@ export default function Home() {
               onChange={(e) => setInput(e.target.value)}
               placeholder="예: 택시 20000원"
               disabled={sending}
-              className="min-h-11 flex-1 rounded-2xl bg-[#f5f5f7] px-4 py-2.5 text-[15px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed] disabled:opacity-60"
+              className="min-h-11 min-w-0 w-full rounded-2xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed] disabled:opacity-60 sm:px-4"
             />
             <button
               type="submit"
               disabled={sending || !input.trim()}
-              className="min-h-11 shrink-0 rounded-2xl bg-[#1d1d1f] px-4 py-2.5 text-[14px] font-medium text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
+              className="min-h-11 shrink-0 rounded-2xl bg-[#1d1d1f] px-3 py-2.5 text-[13px] font-medium text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-35 sm:px-4 sm:text-[14px]"
             >
               전송
             </button>

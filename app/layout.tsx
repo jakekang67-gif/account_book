@@ -47,9 +47,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="ko"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-dvh overflow-hidden antialiased`}
     >
-      <body className="min-h-full flex flex-col font-sans">
+      <body className="flex h-dvh min-h-0 flex-col overflow-hidden font-sans">
         <GoogleProvider>
           <AuthProvider>{children}</AuthProvider>
         </GoogleProvider>
