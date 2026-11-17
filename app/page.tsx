@@ -3,6 +3,10 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AppMenu } from "@/components/AppMenu";
 import { CategoryEditor } from "@/components/CategoryEditor";
+import { CategoryPieChart } from "@/components/CategoryPieChart";
+import { MonthlyBarChart } from "@/components/MonthlyBarChart";
+import { ReceiptUploadButton } from "@/components/ReceiptUploadButton";
+import { VoiceMicButton } from "@/components/VoiceMicButton";
 import {
   DEFAULT_CATEGORY_TREE,
   type Category,
@@ -196,7 +200,7 @@ export default function Home() {
       id: "welcome",
       role: "assistant",
       content:
-        "안녕하세요! 지출을 대화처럼 말해 주세요.\n예: “오늘 점심 12,000원”, “택시 2만 원”\n분류를 제안하면, 승인하신 뒤에 저장해요.\n통계도 물어보세요. 예: “이번 달 총 지출이 얼마야?”",
+        "안녕하세요! 지출을 대화처럼 말해 주세요.\n예: “오늘 점심 12,000원”, “택시 2만 원”\n마이크·영수증 사진으로도 입력할 수 있어요.\n분류를 제안하면, 승인하신 뒤에 저장해요.\n통계도 물어보세요. 예: “이번 달 총 지출이 얼마야?”",
     },
   ]);
   const [input, setInput] = useState("");
@@ -462,10 +466,83 @@ export default function Home() {
     pushAssistant(formatSavedReply(expense));
   }
 
-  async function handleSend(event?: FormEvent) {
+  async function handleReceiptUpload(payload: {
+    base64: string;
+    mimeType: string;
+  }) {
+    if (sending) return;
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: createMessageId(),
+        role: "user",
+        content: "영수증 사진을 올렸어요.",
+      },
+    ]);
+    setSending(true);
+    setChatError(null);
+    setPendingExpense(null);
+    setPendingPhase(null);
+
+    try {
+      const response = await fetch("/api/receipt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: payload.base64,
+          mimeType: payload.mimeType,
+          categoryTree,
+        }),
+      });
+
+      const data = (await response.json()) as {
+        reply?: string;
+        expense?: PendingExpense | null;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ?? "영수증 인식에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        );
+      }
+
+      if (data.expense) {
+        const next: PendingExpense = {
+          date: data.expense.date,
+          amount: data.expense.amount,
+          description: data.expense.description,
+          category: data.expense.category,
+          subcategory: data.expense.subcategory,
+        };
+        setPendingExpense(next);
+        setPendingPhase("confirm");
+        pushAssistant(data.reply?.trim() || formatAskConfirmReply(next));
+        return;
+      }
+
+      pushAssistant(
+        data.reply?.trim() ||
+          "영수증에서 금액을 찾지 못했어요. 직접 말해 주시거나 다시 올려 주세요.",
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "영수증 업로드에 실패했습니다.";
+      setChatError(message);
+      pushAssistant(message);
+    } finally {
+      setSending(false);
+      inputRef.current?.focus();
+    }
+  }
+
+  async function handleSend(event?: FormEvent, overrideText?: string) {
     event?.preventDefault();
 
-    const text = input.trim();
+    const text = (overrideText ?? input).trim();
     if (!text || sending) return;
 
     const userMessage: ChatMessage = {
@@ -938,7 +1015,24 @@ export default function Home() {
           {chatError && (
             <p className="mb-2 px-1 text-[12px] text-red-600">{chatError}</p>
           )}
-          <form onSubmit={handleSend} className="flex items-end gap-2 pb-2">
+          <form
+            onSubmit={(e) => handleSend(e)}
+            className="flex items-end gap-2 pb-2"
+          >
+            <ReceiptUploadButton
+              disabled={sending}
+              onError={(message) => setChatError(message)}
+              onPick={(payload) => void handleReceiptUpload(payload)}
+            />
+            <VoiceMicButton
+              disabled={sending}
+              onError={(message) => setChatError(message)}
+              onTranscript={(text) => {
+                setChatError(null);
+                setInput(text);
+                void handleSend(undefined, text);
+              }}
+            />
             <input
               ref={inputRef}
               type="text"
@@ -971,24 +1065,30 @@ export default function Home() {
                 아직 집계할 내역이 없습니다.
               </p>
             ) : (
-              <ul className="space-y-2">
-                {monthlyTotals.map((row) => (
-                  <li
-                    key={row.month}
-                    className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-                  >
-                    <p className="text-[15px] font-medium text-[#1d1d1f]">
-                      {formatMonthLabel(row.month)}
-                    </p>
-                    <p className="font-mono text-[16px] font-medium tabular-nums text-[#1d1d1f]">
-                      {formatAmount(row.total)}
-                      <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
-                        원
-                      </span>
-                    </p>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-3">
+                <p className="px-1 text-[13px] font-medium text-[#86868b]">
+                  월별 총 지출
+                </p>
+                <MonthlyBarChart data={monthlyTotals} />
+                <ul className="space-y-2">
+                  {monthlyTotals.map((row) => (
+                    <li
+                      key={row.month}
+                      className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                    >
+                      <p className="text-[15px] font-medium text-[#1d1d1f]">
+                        {formatMonthLabel(row.month)}
+                      </p>
+                      <p className="font-mono text-[16px] font-medium tabular-nums text-[#1d1d1f]">
+                        {formatAmount(row.total)}
+                        <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
+                          원
+                        </span>
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
         )}
@@ -1035,24 +1135,30 @@ export default function Home() {
                     이 달 내역이 없습니다.
                   </p>
                 ) : (
-                  <ul className="space-y-2">
-                    {categoryTotals.map((row) => (
-                      <li
-                        key={row.category}
-                        className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-                      >
-                        <p className="text-[15px] font-medium text-[#1d1d1f]">
-                          {row.category}
-                        </p>
-                        <p className="font-mono text-[16px] font-medium tabular-nums text-[#1d1d1f]">
-                          {formatAmount(row.total)}
-                          <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
-                            원
-                          </span>
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
+                  <>
+                    <p className="px-1 text-[13px] font-medium text-[#86868b]">
+                      카테고리 비율
+                    </p>
+                    <CategoryPieChart data={categoryTotals} />
+                    <ul className="space-y-2">
+                      {categoryTotals.map((row) => (
+                        <li
+                          key={row.category}
+                          className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                        >
+                          <p className="text-[15px] font-medium text-[#1d1d1f]">
+                            {row.category}
+                          </p>
+                          <p className="font-mono text-[16px] font-medium tabular-nums text-[#1d1d1f]">
+                            {formatAmount(row.total)}
+                            <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
+                              원
+                            </span>
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
                 )}
               </div>
             )}
