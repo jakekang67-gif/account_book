@@ -38,7 +38,11 @@ import {
   loadChatDraft,
   saveChatDraft,
 } from "@/lib/chatDraftStore";
-import { detectChatIntent } from "@/lib/chatIntent";
+import {
+  detectChatIntent,
+  isChatCleanupAllChoice,
+  isChatCleanupSelectChoice,
+} from "@/lib/chatIntent";
 import { koreaToday } from "@/lib/date";
 import {
   formatMonthLabel,
@@ -86,7 +90,7 @@ type PendingExpense = {
   subcategory: string;
 };
 
-type PendingPhase = "confirm" | "await_category";
+type PendingPhase = "confirm" | "await_category" | "await_chat_cleanup";
 
 /** 금액 천단위 콤마 */
 function formatAmount(amount: number) {
@@ -777,15 +781,30 @@ export default function Home() {
     ]);
   }
 
-  function clearAllChat() {
-    if (
-      !window.confirm(
-        "채팅 대화를 모두 삭제할까요?\n저장된 지출 내역은 그대로 둡니다.",
-      )
-    ) {
-      return;
+  function clearAllChat(options?: {
+    skipConfirm?: boolean;
+    notice?: string;
+  }) {
+    if (!options?.skipConfirm) {
+      if (
+        !window.confirm(
+          "채팅 대화를 모두 삭제할까요?\n저장된 지출 내역은 그대로 둡니다.",
+        )
+      ) {
+        return;
+      }
     }
-    setMessages([WELCOME_MESSAGE]);
+    const nextMessages: ChatMessage[] = options?.notice
+      ? [
+          WELCOME_MESSAGE,
+          {
+            id: createMessageId(),
+            role: "assistant",
+            content: options.notice,
+          },
+        ]
+      : [WELCOME_MESSAGE];
+    setMessages(nextMessages);
     setPendingExpense(null);
     setPendingPhase(null);
     setChatError(null);
@@ -797,13 +816,26 @@ export default function Home() {
     if (user?.id) {
       clearChatDraft(user.id);
       saveChatDraft(user.id, {
-        messages: [WELCOME_MESSAGE],
+        messages: nextMessages,
         pendingExpense: null,
         pendingPhase: null,
         input: "",
         wasSending: false,
         lastUserText: null,
       });
+    }
+  }
+
+  function startChatSelectCleanup(fromChat = false) {
+    setPendingExpense(null);
+    setPendingPhase(null);
+    setTab("chat");
+    setChatSelectMode(true);
+    setSelectedChatIds([]);
+    if (fromChat) {
+      pushAssistant(
+        "지울 대화를 탭으로 고른 뒤 아래 「선택 삭제」를 눌러 주세요. 지출 내역은 그대로 둡니다.",
+      );
     }
   }
 
@@ -891,21 +923,47 @@ export default function Home() {
     setChatError(null);
 
     try {
-      // 저장 확인 중에도 통계 질문이면 대기 건을 취소하고 질문으로 처리
+      // 저장 확인 중에도 통계·채팅삭제면 대기 건을 취소하고 해당 의도로 처리
       const earlyIntent = detectChatIntent(text);
       if (
-        earlyIntent === "stats" &&
+        (earlyIntent === "stats" || earlyIntent === "chat_cleanup") &&
         (pendingPhase === "confirm" || pendingPhase === "await_category")
       ) {
         setPendingExpense(null);
         setPendingPhase(null);
       }
 
+      // 0) 채팅 삭제 방식 고르는 단계
+      if (pendingPhase === "await_chat_cleanup") {
+        if (isChatCleanupAllChoice(text)) {
+          clearAllChat({
+            skipConfirm: true,
+            notice:
+              "대화만 모두 지웠어요. 저장된 지출 금액·내역은 그대로예요.",
+          });
+          return;
+        }
+        if (isChatCleanupSelectChoice(text)) {
+          startChatSelectCleanup(true);
+          return;
+        }
+        if (isNegative(text)) {
+          setPendingPhase(null);
+          pushAssistant("알겠어요. 채팅은 그대로 둘게요.");
+          return;
+        }
+        pushAssistant(
+          "「전부」라고 하시면 대화를 모두 지우고, 「선택」이라고 하시면 고를 수 있어요. (지출 내역은 유지됩니다)",
+        );
+        return;
+      }
+
       // 1) 저장 확인 단계
       if (
         pendingPhase === "confirm" &&
         pendingExpense &&
-        earlyIntent !== "stats"
+        earlyIntent !== "stats" &&
+        earlyIntent !== "chat_cleanup"
       ) {
         if (isAffirmative(text)) {
           await commitPending(pendingExpense);
@@ -927,7 +985,8 @@ export default function Home() {
       if (
         pendingPhase === "await_category" &&
         pendingExpense &&
-        earlyIntent !== "stats"
+        earlyIntent !== "stats" &&
+        earlyIntent !== "chat_cleanup"
       ) {
         const localPair = parseCategoryFromText(text, categoryTree);
         if (localPair) {
@@ -993,11 +1052,22 @@ export default function Home() {
         return;
       }
 
-      // 3) 통계 질문 vs 지출 입력
+      // 3) 채팅 삭제 / 통계 / 지출 입력
       const intent = detectChatIntent(text);
       const historyForApi = messagesWithUser
         .filter((m) => m.id !== "welcome")
         .map(({ role, content }) => ({ role, content }));
+
+      if (intent === "chat_cleanup") {
+        setPendingExpense(null);
+        setPendingPhase("await_chat_cleanup");
+        setChatSelectMode(false);
+        setSelectedChatIds([]);
+        pushAssistant(
+          "대화를 지울까요? 「전부」 또는 「선택」이라고 말씀해 주세요. 저장된 지출은 그대로 둡니다.",
+        );
+        return;
+      }
 
       if (intent === "stats") {
         // 최신 지출을 Supabase에서 다시 가져와 Gemini에 전달
@@ -1707,12 +1777,8 @@ export default function Home() {
       <ChatCleanupMenu
         open={chatCleanupOpen}
         onClose={() => setChatCleanupOpen(false)}
-        onClearAll={clearAllChat}
-        onStartSelect={() => {
-          setTab("chat");
-          setChatSelectMode(true);
-          setSelectedChatIds([]);
-        }}
+        onClearAll={() => clearAllChat()}
+        onStartSelect={() => startChatSelectCleanup(false)}
       />
 
       <BudgetList

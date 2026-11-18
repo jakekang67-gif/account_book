@@ -1,8 +1,8 @@
 /**
- * 챗봇 메시지 의도: 지출 입력 vs 통계/조회 질문
+ * 챗봇 메시지 의도: 지출 입력 vs 통계/조회 vs 채팅 삭제
  */
 
-export type ChatIntent = "expense" | "stats";
+export type ChatIntent = "expense" | "stats" | "chat_cleanup";
 
 /** 금액이 포함되어 있으면 지출 입력으로 봅니다. */
 export function hasExpenseAmount(text: string) {
@@ -39,11 +39,60 @@ export function looksLikeStatsQuestion(text: string) {
 }
 
 /**
- * 금액이 있으면 지출, 의문 단서가 있으면 질문.
+ * 채팅(대화)만 지우겠다는 요청.
+ * 지출·내역 삭제는 제외합니다.
+ */
+export function looksLikeChatCleanupRequest(text: string) {
+  const t = text.trim().replace(/\s+/g, " ");
+  if (!t || hasExpenseAmount(t)) return false;
+
+  // "지출 내역 삭제" 등은 채팅 삭제가 아님
+  if (
+    /(지출|내역).*(삭제|지워|제거|없애)/.test(t) &&
+    !/(채팅|대화|메시지|말풍선)/.test(t)
+  ) {
+    return false;
+  }
+
+  return (
+    /(채팅|대화|메시지|말풍선).{0,12}(내용|기록|히스토리)? .{0,6}(삭제|지워|비워|클리어|없애|정리)/.test(
+      t,
+    ) ||
+    /(채팅|대화|메시지|말풍선).{0,8}(삭제|지워|비워|클리어|없애|정리)/.test(t) ||
+    /(삭제|지워|비워|클리어|없애).{0,8}(채팅|대화|메시지|말풍선)/.test(t) ||
+    /^(채팅|대화)\s*(전체\s*)?(삭제|지워|클리어)/.test(t)
+  );
+}
+
+/** 「전부」로 전체 채팅 삭제 */
+export function isChatCleanupAllChoice(text: string) {
+  const t = text.trim().toLowerCase().replace(/\s+/g, "");
+  if (!t) return false;
+  if (
+    /^(전부|전체|다|모두|올|all|전체삭제|전부삭제|다지워|다삭제|전부지워|전체지워|다잊어)$/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  return /^(전부|전체|모두|다).{0,6}(삭제|지워|클리어)/.test(t);
+}
+
+/** 「선택」으로 부분 삭제 모드 */
+export function isChatCleanupSelectChoice(text: string) {
+  const t = text.trim().toLowerCase().replace(/\s+/g, "");
+  if (!t) return false;
+  if (/^(선택|골라|일부|부분|select)$/i.test(t)) return true;
+  return /^(선택|일부|골라|부분).{0,6}(삭제|지워)/.test(t);
+}
+
+/**
+ * 금액이 있으면 지출, 채팅 삭제·통계 단서가 있으면 해당 의도.
  * 둘 다면 금액(지출) 우선.
  */
 export function detectChatIntent(text: string): ChatIntent {
   if (hasExpenseAmount(text)) return "expense";
+  if (looksLikeChatCleanupRequest(text)) return "chat_cleanup";
   if (looksLikeStatsQuestion(text)) return "stats";
   return "expense";
 }

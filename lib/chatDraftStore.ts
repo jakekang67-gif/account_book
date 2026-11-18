@@ -18,7 +18,7 @@ export type ChatDraft = {
   userId: string;
   messages: ChatDraftMessage[];
   pendingExpense: ChatDraftPendingExpense | null;
-  pendingPhase: "confirm" | "await_category" | null;
+  pendingPhase: "confirm" | "await_category" | "await_chat_cleanup" | null;
   input: string;
   /** 나가기 직전 AI 응답 대기 중이었는지 */
   wasSending: boolean;
