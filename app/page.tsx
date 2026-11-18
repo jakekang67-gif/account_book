@@ -2022,7 +2022,7 @@ export default function Home() {
                 message.id !== "welcome";
               const isEditing =
                 !chatSelectMode && editingMessageId === message.id;
-              const bubbleClass = `whitespace-pre-wrap break-words rounded-2xl px-3.5 py-1 text-left text-[15px] leading-relaxed transition-shadow select-none ${
+              const bubbleClass = `whitespace-pre-wrap break-words rounded-2xl px-3.5 py-1 text-left text-[15px] leading-[20px] transition-shadow select-none ${
                 message.id === "welcome"
                   ? "w-full max-w-full border border-black/5 bg-[#fff8e8] text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-opacity duration-500"
                   : "max-w-[85%]"
@@ -2125,7 +2125,7 @@ export default function Home() {
                       <span
                         className={
                           message.id === "welcome"
-                            ? "text-[13px] leading-relaxed text-[#6e6e73]"
+                            ? "text-[13px] leading-[20px] text-[#6e6e73]"
                             : undefined
                         }
                       >
