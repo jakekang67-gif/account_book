@@ -1805,7 +1805,7 @@ export default function Home() {
         <section className="shrink-0 border-b border-[#9ec0e8] bg-[#d4e8ff] px-3 py-2">
           <div className="mb-1.5 flex items-baseline justify-between gap-3 px-0.5">
             <p className="text-[12px] font-medium text-[#4a6a8a]">지출 내역</p>
-            <p className="font-mono text-[12px] tabular-nums text-[#1d1d1f]">
+            <p className="text-[12px] tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
               합계 {formatAmount(total)}
               <span className="ml-0.5 text-[#86868b]">원</span>
             </p>
@@ -1859,7 +1859,7 @@ export default function Home() {
                           onChange={(e) =>
                             setEditForm({ ...editForm, amount: e.target.value })
                           }
-                          className={`${fieldClassName} font-mono`}
+                          className={`${fieldClassName} tabular-nums [font-feature-settings:'zero'_0]`}
                           disabled={isBusy}
                           placeholder="금액"
                         />
@@ -1949,7 +1949,7 @@ export default function Home() {
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          <p className="font-mono text-[14px] font-medium leading-tight tabular-nums text-[#1d1d1f]">
+                          <p className="text-[14px] font-medium leading-tight tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
                             {formatAmount(item.amount)}
                             <span className="ml-0.5 text-[11px] font-normal text-[#86868b]">
                               원
@@ -2283,7 +2283,7 @@ export default function Home() {
                       <p className="text-[15px] font-medium text-[#1d1d1f]">
                         {formatMonthLabel(row.month)}
                       </p>
-                      <p className="font-mono text-[16px] font-medium tabular-nums text-[#1d1d1f]">
+                      <p className="text-[16px] font-medium tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
                         {formatAmount(row.total)}
                         <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
                           원
@@ -2328,7 +2328,7 @@ export default function Home() {
 
                 <div className="flex items-baseline justify-between px-1">
                   <p className="text-[13px] text-[#86868b]">이번 달 합계</p>
-                  <p className="font-mono text-[15px] tabular-nums text-[#1d1d1f]">
+                  <p className="text-[15px] tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
                     {formatAmount(categoryMonthTotal)}
                     <span className="ml-0.5 text-[12px] text-[#86868b]">원</span>
                   </p>
@@ -2355,7 +2355,7 @@ export default function Home() {
                           <p className="text-[15px] font-medium text-[#1d1d1f]">
                             {row.category}
                           </p>
-                          <p className="font-mono text-[16px] font-medium tabular-nums text-[#1d1d1f]">
+                          <p className="text-[16px] font-medium tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
                             {formatAmount(row.total)}
                             <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
                               원
