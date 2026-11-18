@@ -212,7 +212,7 @@ const WELCOME_MESSAGE: ChatMessage = {
   id: "welcome",
   role: "assistant",
   content:
-    "안녕하세요. 지출을 말해 주세요!\n예를들면 “오늘 점심 12,000원”처럼 짧게!\n저장 전 분류를 확인받고, 통계도 물어보실 수 있어요.",
+    "안녕하세요. 지출을 말씀해 주세요!\n예를들면 “오늘 점심 12,000원”처럼 짧게!\n저장 전 분류 확인, 통계도 물어보실 수 있어요.",
 };
 
 export default function Home() {
