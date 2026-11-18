@@ -32,6 +32,11 @@ import {
   loadCategoryTree,
   type CategoryItemRow,
 } from "@/lib/categoryStore";
+import {
+  clearChatDraft,
+  loadChatDraft,
+  saveChatDraft,
+} from "@/lib/chatDraftStore";
 import { detectChatIntent } from "@/lib/chatIntent";
 import { koreaToday } from "@/lib/date";
 import {
@@ -203,6 +208,13 @@ function defaultEditForm(item: Expense, tree: CategoryTree): EditForm {
 const fieldClassName =
   "w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[14px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]";
 
+const WELCOME_MESSAGE: ChatMessage = {
+  id: "welcome",
+  role: "assistant",
+  content:
+    "지출을 말해 주세요!\n예를들면 “오늘 점심 12,000원”처럼 짧게!\n저장 전 분류를 확인받고, 통계도 물어보실 수 있어요.",
+};
+
 export default function Home() {
   const { user, loading: authLoading, signOut } = useAuth();
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -213,14 +225,7 @@ export default function Home() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
 
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content:
-        "지출을 말해 주세요!\n예를들면 “오늘 점심 12,000원”처럼 짧게!\n저장 전 분류를 확인받고, 통계도 물어보실 수 있어요.",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -228,6 +233,9 @@ export default function Home() {
     null,
   );
   const [pendingPhase, setPendingPhase] = useState<PendingPhase | null>(null);
+  const [resumeSendText, setResumeSendText] = useState<string | null>(null);
+  const chatDraftReadyRef = useRef(false);
+  const skipNextUserAppendRef = useRef(false);
   const [tab, setTab] = useState<AppTab>("chat");
   const [reportMonth, setReportMonth] = useState("");
   const [categoryTree, setCategoryTree] =
@@ -316,11 +324,66 @@ export default function Home() {
       setBudgetError(null);
       budgetAlertReadyRef.current = false;
       budgetWasOverRef.current = false;
+      chatDraftReadyRef.current = false;
+      setMessages([WELCOME_MESSAGE]);
+      setPendingExpense(null);
+      setPendingPhase(null);
+      setInput("");
+      setSending(false);
+      setResumeSendText(null);
       return;
     }
+
+    const previousUserId = user.id;
     void loadExpenses();
     void refreshCategories();
+
+    // 로그인 사용자별 채팅 초안 복구
+    chatDraftReadyRef.current = false;
+    const draft = loadChatDraft(previousUserId);
+    if (draft && draft.messages.length > 0) {
+      setMessages(draft.messages as ChatMessage[]);
+      setPendingExpense(draft.pendingExpense);
+      setPendingPhase(draft.pendingPhase);
+      setInput(draft.input || "");
+      if (draft.wasSending && draft.lastUserText?.trim()) {
+        skipNextUserAppendRef.current = true;
+        setResumeSendText(draft.lastUserText.trim());
+      }
+    } else {
+      setMessages([WELCOME_MESSAGE]);
+      setPendingExpense(null);
+      setPendingPhase(null);
+      setInput("");
+    }
+    chatDraftReadyRef.current = true;
   }, [user?.id]);
+
+  // 채팅·대기 상태를 로컬에 저장 (앱을 나가도 유지)
+  useEffect(() => {
+    if (!user?.id || !chatDraftReadyRef.current) return;
+    // 복구 직후 재전송 예약 중이면 wasSending을 덮어쓰지 않음
+    if (resumeSendText) return;
+    const lastUser = [...messages]
+      .reverse()
+      .find((m) => m.role === "user");
+    saveChatDraft(user.id, {
+      messages,
+      pendingExpense,
+      pendingPhase,
+      input,
+      wasSending: sending,
+      lastUserText: sending ? (lastUser?.content ?? null) : null,
+    });
+  }, [
+    user?.id,
+    messages,
+    pendingExpense,
+    pendingPhase,
+    input,
+    sending,
+    resumeSendText,
+  ]);
 
   useEffect(() => {
     if (!user || !currentMonth) return;
@@ -615,13 +678,22 @@ export default function Home() {
     const text = (overrideText ?? input).trim();
     if (!text || sending) return;
 
+    const alreadyAppended = skipNextUserAppendRef.current;
+    skipNextUserAppendRef.current = false;
+
     const userMessage: ChatMessage = {
       id: createMessageId(),
       role: "user",
       content: text,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    // 복구 재전송이면 사용자 문구가 이미 있으므로 다시 붙이지 않음
+    const messagesWithUser = alreadyAppended
+      ? messages
+      : [...messages, userMessage];
+    if (!alreadyAppended) {
+      setMessages((prev) => [...prev, userMessage]);
+    }
     setInput("");
     setSending(true);
     setChatError(null);
@@ -731,7 +803,7 @@ export default function Home() {
 
       // 3) 통계 질문 vs 지출 입력
       const intent = detectChatIntent(text);
-      const historyForApi = [...messages, userMessage]
+      const historyForApi = messagesWithUser
         .filter((m) => m.id !== "welcome")
         .map(({ role, content }) => ({ role, content }));
 
@@ -828,6 +900,19 @@ export default function Home() {
       inputRef.current?.focus();
     }
   }
+
+  // 앱을 나갔다 왔을 때, 중단됐던 요청 자동 재전송
+  useEffect(() => {
+    if (!resumeSendText || !user?.id) return;
+    if (sending) return;
+    const text = resumeSendText;
+    setResumeSendText(null);
+    pushAssistant(
+      "앱을 나갔다 와서, 방금 요청을 다시 보내는 중이에요...",
+    );
+    void handleSend(undefined, text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 복구 시 1회 재전송
+  }, [resumeSendText, user?.id]);
 
   const total = expenses.reduce((sum, item) => sum + item.amount, 0);
 
