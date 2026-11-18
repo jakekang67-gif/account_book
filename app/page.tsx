@@ -9,6 +9,7 @@ import { CategoryEditor } from "@/components/CategoryEditor";
 import { ChatCleanupMenu } from "@/components/ChatCleanupMenu";
 import { ChatNoticeBanner } from "@/components/ChatNoticeBanner";
 import { InstallHelp } from "@/components/InstallHelp";
+import { SaveExpenseToDateDialog } from "@/components/SaveExpenseToDateDialog";
 import { CategoryPieChart } from "@/components/CategoryPieChart";
 import { LoginForm } from "@/components/LoginForm";
 import { MonthlyBarChart } from "@/components/MonthlyBarChart";
@@ -45,7 +46,7 @@ import {
   isChatCleanupSelectChoice,
 } from "@/lib/chatIntent";
 import { normalizeExpenseDescription } from "@/lib/expenseDescription";
-import { koreaToday } from "@/lib/date";
+import { koreaDateString, koreaToday } from "@/lib/date";
 import {
   formatMonthLabel,
   listMonths,
@@ -328,7 +329,9 @@ export default function Home() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
-  const [copiedExpenseId, setCopiedExpenseId] = useState<number | null>(null);
+  const [saveToDateItem, setSaveToDateItem] = useState<Expense | null>(null);
+  const [saveToDateValue, setSaveToDateValue] = useState(koreaToday);
+  const [saveToDateBusy, setSaveToDateBusy] = useState(false);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
   const [budgetListOpen, setBudgetListOpen] = useState(false);
@@ -1096,28 +1099,48 @@ export default function Home() {
     }, 900);
   }
 
-  async function copyExpense(item: Expense) {
-    const category =
-      item.category && item.subcategory
-        ? `${item.category}_${item.subcategory}`
-        : item.category || item.subcategory || "";
-    const text = [
-      item.date,
-      item.description,
-      `${formatAmount(item.amount)}원`,
-      category,
-    ]
-      .filter(Boolean)
-      .join(" ");
-    const ok = await copyTextToClipboard(text);
-    if (!ok) {
-      window.alert("복사에 실패했어요. 다시 시도해 주세요.");
+  function openSaveToDate(item: Expense) {
+    setSaveToDateItem(item);
+    // 기본값: 원본과 다른 날짜를 고르기 쉽게 오늘(같으면 어제)
+    const today = koreaToday();
+    setSaveToDateValue(item.date === today ? koreaDateString(-1) : today);
+    setSaveToDateBusy(false);
+  }
+
+  async function confirmSaveToDate() {
+    if (!saveToDateItem || !saveToDateValue) return;
+    if (saveToDateValue === saveToDateItem.date) {
+      window.alert("원래 날짜와 같습니다. 다른 날짜를 골라 주세요.");
       return;
     }
-    setCopiedExpenseId(item.id);
-    window.setTimeout(() => {
-      setCopiedExpenseId((prev) => (prev === item.id ? null : prev));
-    }, 900);
+
+    setSaveToDateBusy(true);
+    setExpenseError(null);
+    const saved = await saveExpense({
+      date: saveToDateValue,
+      amount: saveToDateItem.amount,
+      description: saveToDateItem.description,
+      category: saveToDateItem.category ?? "기타",
+      subcategory: saveToDateItem.subcategory ?? "기타",
+    });
+    setSaveToDateBusy(false);
+
+    if (!saved) {
+      window.alert("다른 날짜로 저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      return;
+    }
+
+    setSaveToDateItem(null);
+    setSelectedId(null);
+    pushAssistant(
+      formatSavedReply({
+        date: saved.date,
+        amount: saved.amount,
+        description: saved.description,
+        category: saved.category ?? "기타",
+        subcategory: saved.subcategory ?? "기타",
+      }),
+    );
   }
 
   function cancelEditChat() {
@@ -1915,13 +1938,11 @@ export default function Home() {
                             >
                               <button
                                 type="button"
-                                onClick={() => void copyExpense(item)}
+                                onClick={() => openSaveToDate(item)}
                                 disabled={isBusy || busyId !== null}
                                 className="rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[12px] font-medium text-[#5856d6] disabled:opacity-40"
                               >
-                                {copiedExpenseId === item.id
-                                  ? "복사됨"
-                                  : "복사"}
+                                다른 날짜
                               </button>
                               <button
                                 type="button"
@@ -2342,6 +2363,23 @@ export default function Home() {
       <InstallHelp
         open={installHelpOpen}
         onClose={() => setInstallHelpOpen(false)}
+      />
+
+      <SaveExpenseToDateDialog
+        open={saveToDateItem !== null}
+        description={saveToDateItem?.description ?? ""}
+        amountLabel={
+          saveToDateItem
+            ? `${formatAmount(saveToDateItem.amount)}원`
+            : ""
+        }
+        dateValue={saveToDateValue}
+        busy={saveToDateBusy}
+        onDateChange={setSaveToDateValue}
+        onClose={() => {
+          if (!saveToDateBusy) setSaveToDateItem(null);
+        }}
+        onSave={() => void confirmSaveToDate()}
       />
 
       <ChatCleanupMenu
