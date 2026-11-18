@@ -105,14 +105,16 @@ function formatSavedReply(expense: PendingExpense) {
   const [, m, d] = expense.date.split("-");
   const monthDay =
     m && d ? `${Number(m)}월 ${Number(d)}일` : expense.date;
-  return `${monthDay} ${expense.category}(${expense.subcategory}) ${expense.description} ${formatAmount(expense.amount)}원을 저장했어요!`;
+  // 예: 11월 17일 담배_담배 13,500원을 저장했어요.
+  return `${monthDay} ${expense.category}_${expense.subcategory} ${formatAmount(expense.amount)}원을 저장했어요.`;
 }
 
 function formatAskConfirmReply(expense: PendingExpense) {
   const [, m, d] = expense.date.split("-");
   const monthDay =
     m && d ? `${Number(m)}월 ${Number(d)}일` : expense.date;
-  return `${monthDay} ${expense.description} ${formatAmount(expense.amount)}원 — "${expense.category}-${expense.subcategory}"로 저장할까요?`;
+  // 예: 11월 17일 담배 13500원 - "담배-담배"로 저장할까요?
+  return `${monthDay} ${expense.description} ${expense.amount}원 - "${expense.category}-${expense.subcategory}"로 저장할까요?`;
 }
 
 /** 승인 의도 (네/응/저장 등) */
@@ -1382,9 +1384,7 @@ export default function Home() {
           };
           setPendingExpense(next);
           setPendingPhase("confirm");
-          pushAssistant(
-            data.reply?.trim() || formatAskConfirmReply(next),
-          );
+          pushAssistant(formatAskConfirmReply(next));
           return;
         }
 
@@ -1489,7 +1489,7 @@ export default function Home() {
         };
         setPendingExpense(next);
         setPendingPhase("confirm");
-        pushAssistant(data.reply?.trim() || formatAskConfirmReply(next));
+        pushAssistant(formatAskConfirmReply(next));
         return;
       }
 
