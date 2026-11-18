@@ -2122,11 +2122,6 @@ export default function Home() {
                       }}
                       className={bubbleClass}
                     >
-                      {message.id === "welcome" && (
-                        <span className="mb-1.5 block text-[13px] font-semibold text-[#1d1d1f]">
-                          안내
-                        </span>
-                      )}
                       <span
                         className={
                           message.id === "welcome"
