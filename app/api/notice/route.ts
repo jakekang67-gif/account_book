@@ -1,7 +1,5 @@
-import { NextResponse } from "next/server";
+import { connection, NextResponse } from "next/server";
 import { getGeminiModelCandidates } from "@/lib/geminiModels";
-
-export const dynamic = "force-dynamic";
 
 /**
  * 채팅 상단 공지.
@@ -10,6 +8,9 @@ export const dynamic = "force-dynamic";
  * - CHAT_NOTICE_TITLE : 제목 (선택)
  */
 export async function GET() {
+  // Cache Components 환경에서 요청마다 최신 env 공지를 읽도록 함
+  await connection();
+
   const models = getGeminiModelCandidates();
   const custom = process.env.CHAT_NOTICE?.trim();
   const title =
