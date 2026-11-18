@@ -3,12 +3,19 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AppMenu } from "@/components/AppMenu";
 import { useAuth } from "@/components/AuthProvider";
+import { BudgetEditor } from "@/components/BudgetEditor";
+import { BudgetStatus } from "@/components/BudgetStatus";
 import { CategoryEditor } from "@/components/CategoryEditor";
 import { CategoryPieChart } from "@/components/CategoryPieChart";
 import { LoginForm } from "@/components/LoginForm";
 import { MonthlyBarChart } from "@/components/MonthlyBarChart";
 import { ReceiptUploadButton } from "@/components/ReceiptUploadButton";
 import { VoiceMicButton } from "@/components/VoiceMicButton";
+import {
+  clearMonthlyBudget,
+  loadMonthlyBudget,
+  saveMonthlyBudget,
+} from "@/lib/budgetStore";
 import {
   DEFAULT_CATEGORY_TREE,
   type Category,
@@ -23,6 +30,7 @@ import { koreaToday } from "@/lib/date";
 import {
   formatMonthLabel,
   listMonths,
+  monthKeyFromDate,
   summarizeByCategory,
   summarizeByMonth,
 } from "@/lib/reports";
@@ -219,6 +227,9 @@ export default function Home() {
     useState<CategoryTree>(DEFAULT_CATEGORY_TREE);
   const [categoryRows, setCategoryRows] = useState<CategoryItemRow[]>([]);
   const [categoryEditorOpen, setCategoryEditorOpen] = useState(false);
+  const [budgetEditorOpen, setBudgetEditorOpen] = useState(false);
+  const [monthBudget, setMonthBudget] = useState<number | null>(null);
+  const [budgetError, setBudgetError] = useState<string | null>(null);
   const [categoryLoadError, setCategoryLoadError] = useState<string | null>(
     null,
   );
@@ -254,6 +265,16 @@ export default function Home() {
     [categoryTotals],
   );
 
+  const currentMonth = useMemo(() => koreaToday().slice(0, 7), []);
+
+  const thisMonthSpent = useMemo(
+    () =>
+      expenses
+        .filter((item) => monthKeyFromDate(item.date) === currentMonth)
+        .reduce((sum, item) => sum + item.amount, 0),
+    [expenses, currentMonth],
+  );
+
   useEffect(() => {
     if (!user) {
       setExpenses([]);
@@ -261,10 +282,13 @@ export default function Home() {
       setCategoryTree(DEFAULT_CATEGORY_TREE);
       setLoadingExpenses(false);
       setCategoryLoadError(null);
+      setMonthBudget(null);
+      setBudgetError(null);
       return;
     }
     void loadExpenses();
     void refreshCategories();
+    void refreshBudget();
   }, [user?.id]);
 
   useEffect(() => {
@@ -294,6 +318,17 @@ export default function Home() {
     setCategoryTree(result.tree);
     setCategoryRows(result.rows);
     setCategoryLoadError(result.error);
+  }
+
+  async function refreshBudget() {
+    const result = await loadMonthlyBudget(currentMonth);
+    if (result.error) {
+      setBudgetError(result.error);
+      setMonthBudget(null);
+      return;
+    }
+    setBudgetError(null);
+    setMonthBudget(result.budget?.amount ?? null);
   }
 
   async function loadExpenses() {
@@ -808,6 +843,7 @@ export default function Home() {
             <AppMenu
               expenses={expenses}
               onOpenCategoryEditor={() => setCategoryEditorOpen(true)}
+              onOpenBudgetEditor={() => setBudgetEditorOpen(true)}
               accountEmail={user.email}
               onSignOut={() => void signOut()}
             />
@@ -822,8 +858,23 @@ export default function Home() {
           </p>
         )}
 
+        {budgetError && (
+          <p className="bg-[#fff4e5] px-4 py-2 text-center text-[12px] text-[#8a6116]">
+            예산 DB 연결 확인: {budgetError}
+            {" · "}
+            SQL로 monthly_budgets 테이블을 만들어 주세요.
+          </p>
+        )}
+
         {tab === "chat" && (
           <>
+        <BudgetStatus
+          monthLabel={formatMonthLabel(currentMonth)}
+          spent={thisMonthSpent}
+          budget={monthBudget}
+          onEdit={() => setBudgetEditorOpen(true)}
+        />
+
         {/* 저장된 지출 카드 */}
         <section className="shrink-0 border-b border-black/5 bg-[#f5f5f7] px-4 py-3">
           <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
@@ -1238,6 +1289,27 @@ export default function Home() {
         tree={categoryTree}
         onClose={() => setCategoryEditorOpen(false)}
         onChanged={refreshCategories}
+      />
+
+      <BudgetEditor
+        open={budgetEditorOpen}
+        month={currentMonth}
+        currentAmount={monthBudget}
+        onClose={() => setBudgetEditorOpen(false)}
+        onSave={async (amount) => {
+          const result = await saveMonthlyBudget(currentMonth, amount);
+          if (result.error) return result.error;
+          setMonthBudget(result.budget?.amount ?? amount);
+          setBudgetError(null);
+          return null;
+        }}
+        onClear={async () => {
+          const result = await clearMonthlyBudget(currentMonth);
+          if (result.error) return result.error;
+          setMonthBudget(null);
+          setBudgetError(null);
+          return null;
+        }}
       />
     </div>
   );
