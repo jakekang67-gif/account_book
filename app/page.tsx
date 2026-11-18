@@ -581,7 +581,11 @@ export default function Home() {
   ]);
 
   useEffect(() => {
-    // 환영 안내만 있을 때는 맨 위가 보이도록 (모바일에서 잘림 방지)
+    // 환영 안내가 보일 때는 채팅 맨 위로 (가려지지 않게)
+    if (showWelcomeTip) {
+      chatScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+      return;
+    }
     const onlyWelcome =
       messages.length === 1 && messages[0]?.id === "welcome" && !sending;
     if (onlyWelcome) {
@@ -589,7 +593,7 @@ export default function Home() {
       return;
     }
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, sending]);
+  }, [messages, sending, showWelcomeTip]);
 
   // 데이터가 바뀌면 리포트용 월 기본값을 최신 월로 맞춤
   useEffect(() => {
@@ -1797,10 +1801,10 @@ export default function Home() {
 
         {tab === "chat" && (
           <>
-        {/* 저장된 지출 카드 */}
-        <section className="shrink-0 border-b border-black/5 bg-[#f5f5f7] px-3 py-2">
+        {/* 저장된 지출 카드 — 연한 색으로 대화창과 구분 */}
+        <section className="shrink-0 border-b border-[#c5d9f0] bg-[#e8f2ff] px-3 py-2">
           <div className="mb-1.5 flex items-baseline justify-between gap-3 px-0.5">
-            <p className="text-[13px] font-medium text-[#86868b]">지출 내역</p>
+            <p className="text-[13px] font-medium text-[#5a7a9a]">지출 내역</p>
             <p className="font-mono text-[13px] tabular-nums text-[#1d1d1f]">
               합계 {formatAmount(total)}
               <span className="ml-0.5 text-[#86868b]">원</span>
@@ -2001,6 +2005,13 @@ export default function Home() {
             active={!chatSelectMode}
             showRequestId={chatNoticeShowRequestId}
           />
+          {showWelcomeTip && !chatSelectMode && (
+            <div className="sticky top-0 z-10 mb-3 rounded-2xl border border-black/5 bg-[#fff8e8] px-3.5 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+              <p className="whitespace-pre-wrap text-[13px] leading-[20px] text-[#6e6e73]">
+                {WELCOME_MESSAGE.content}
+              </p>
+            </div>
+          )}
           {chatSelectMode && (
             <p className="mb-3 text-center text-[12px] text-[#86868b]">
               지울 대화를 선택한 뒤 아래 「선택 삭제」를 누르세요. (안내 문구는
@@ -2009,7 +2020,8 @@ export default function Home() {
           )}
           <ul className="flex flex-col gap-3">
             {messages.map((message) => {
-              if (message.id === "welcome" && !showWelcomeTip) {
+              // 환영 안내는 위 sticky 배너로만 표시
+              if (message.id === "welcome") {
                 return null;
               }
               const selectable =
