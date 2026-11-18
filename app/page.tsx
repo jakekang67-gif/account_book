@@ -330,7 +330,7 @@ export default function Home() {
   const [editDraft, setEditDraft] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [saveToDateItem, setSaveToDateItem] = useState<Expense | null>(null);
-  const [saveToDateValue, setSaveToDateValue] = useState(koreaToday);
+  const [saveToDateValue, setSaveToDateValue] = useState("");
   const [saveToDateBusy, setSaveToDateBusy] = useState(false);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
