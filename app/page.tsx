@@ -2130,7 +2130,7 @@ export default function Home() {
                       <span
                         className={
                           message.id === "welcome"
-                            ? "text-[12px] leading-relaxed text-[#6e6e73]"
+                            ? "text-[13px] leading-relaxed text-[#6e6e73]"
                             : undefined
                         }
                       >
