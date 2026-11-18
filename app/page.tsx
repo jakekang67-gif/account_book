@@ -1802,25 +1802,25 @@ export default function Home() {
         {tab === "chat" && (
           <>
         {/* 저장된 지출 카드 — 연한 색으로 대화창과 구분 */}
-        <section className="shrink-0 border-b border-[#c5d9f0] bg-[#e8f2ff] px-3 py-2">
+        <section className="shrink-0 border-b border-[#9ec0e8] bg-[#d4e8ff] px-3 py-2">
           <div className="mb-1.5 flex items-baseline justify-between gap-3 px-0.5">
-            <p className="text-[13px] font-medium text-[#5a7a9a]">지출 내역</p>
-            <p className="font-mono text-[13px] tabular-nums text-[#1d1d1f]">
+            <p className="text-[12px] font-medium text-[#4a6a8a]">지출 내역</p>
+            <p className="font-mono text-[12px] tabular-nums text-[#1d1d1f]">
               합계 {formatAmount(total)}
               <span className="ml-0.5 text-[#86868b]">원</span>
             </p>
           </div>
 
           {expenseError && (
-            <p className="mb-1.5 px-0.5 text-[13px] text-red-600">{expenseError}</p>
+            <p className="mb-1.5 px-0.5 text-[12px] text-red-600">{expenseError}</p>
           )}
 
           {loadingExpenses ? (
-            <p className="rounded-2xl bg-white px-3 py-3 text-center text-[14px] text-[#86868b]">
+            <p className="rounded-2xl bg-white px-3 py-3 text-center text-[13px] text-[#86868b]">
               불러오는 중...
             </p>
           ) : expenses.length === 0 ? (
-            <p className="rounded-2xl bg-white px-3 py-3 text-center text-[14px] text-[#86868b]">
+            <p className="rounded-2xl bg-white px-3 py-3 text-center text-[13px] text-[#86868b]">
               아직 저장된 내역이 없습니다.
             </p>
           ) : (
@@ -1940,18 +1940,18 @@ export default function Home() {
                         className="flex cursor-pointer items-center justify-between gap-3"
                       >
                         <div className="min-w-0 flex-1 leading-tight">
-                          <p className="truncate text-[15px] font-medium leading-tight text-[#1d1d1f]">
+                          <p className="truncate text-[14px] font-medium leading-tight text-[#1d1d1f]">
                             {item.description}
                           </p>
-                          <p className="mt-0 text-[12px] leading-tight text-[#86868b]">
+                          <p className="mt-0 text-[11px] leading-tight text-[#86868b]">
                             {item.date}
                             {categoryLabel ? ` · ${categoryLabel}` : ""}
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          <p className="font-mono text-[15px] font-medium leading-tight tabular-nums text-[#1d1d1f]">
+                          <p className="font-mono text-[14px] font-medium leading-tight tabular-nums text-[#1d1d1f]">
                             {formatAmount(item.amount)}
-                            <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
+                            <span className="ml-0.5 text-[11px] font-normal text-[#86868b]">
                               원
                             </span>
                           </p>
@@ -1964,7 +1964,7 @@ export default function Home() {
                                 type="button"
                                 onClick={() => openSaveToDate(item)}
                                 disabled={isBusy || busyId !== null}
-                                className="rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[12px] font-medium text-[#5856d6] disabled:opacity-40"
+                                className="rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[11px] font-medium text-[#5856d6] disabled:opacity-40"
                               >
                                 다른 날짜
                               </button>
@@ -1972,7 +1972,7 @@ export default function Home() {
                                 type="button"
                                 onClick={() => startEdit(item)}
                                 disabled={isBusy || busyId !== null}
-                                className="rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[12px] font-medium text-[#1d1d1f] disabled:opacity-40"
+                                className="rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[11px] font-medium text-[#1d1d1f] disabled:opacity-40"
                               >
                                 수정
                               </button>
@@ -1980,7 +1980,7 @@ export default function Home() {
                                 type="button"
                                 onClick={() => void handleDelete(item)}
                                 disabled={isBusy || busyId !== null}
-                                className="rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[12px] font-medium text-[#b42318] disabled:opacity-40"
+                                className="rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[11px] font-medium text-[#b42318] disabled:opacity-40"
                               >
                                 {isBusy ? "삭제 중..." : "삭제"}
                               </button>
