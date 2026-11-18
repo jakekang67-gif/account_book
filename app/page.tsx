@@ -314,6 +314,10 @@ export default function Home() {
   const [appMenuOpen, setAppMenuOpen] = useState(false);
   const [chatSelectMode, setChatSelectMode] = useState(false);
   const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
+  /** 길게 눌러 단일 삭제 대상 */
+  const [contextMessageId, setContextMessageId] = useState<string | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
   const [budgetListOpen, setBudgetListOpen] = useState(false);
   const [budgetEditorOpen, setBudgetEditorOpen] = useState(false);
   const [editingBudgetMonth, setEditingBudgetMonth] = useState("");
@@ -812,6 +816,7 @@ export default function Home() {
     setResumeSendText(null);
     setChatSelectMode(false);
     setSelectedChatIds([]);
+    setContextMessageId(null);
     skipNextUserAppendRef.current = false;
     preserveSendingDraftRef.current = false;
     if (user?.id) {
@@ -833,6 +838,7 @@ export default function Home() {
     setTab("chat");
     setChatSelectMode(true);
     setSelectedChatIds([]);
+    setContextMessageId(null);
     if (fromChat) {
       pushAssistant(
         "지울 대화를 탭으로 고른 뒤 아래 「선택 삭제」를 눌러 주세요. 지출 내역은 그대로 둡니다.",
@@ -866,6 +872,66 @@ export default function Home() {
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   }
+
+  function clearLongPressTimer() {
+    if (longPressTimerRef.current != null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressStartRef.current = null;
+  }
+
+  function startLongPress(id: string, clientX: number, clientY: number) {
+    if (chatSelectMode || id === "welcome" || sending) return;
+    clearLongPressTimer();
+    longPressStartRef.current = { x: clientX, y: clientY };
+    longPressTimerRef.current = window.setTimeout(() => {
+      setContextMessageId(id);
+      longPressTimerRef.current = null;
+      longPressStartRef.current = null;
+    }, 480);
+  }
+
+  function onLongPressMove(clientX: number, clientY: number) {
+    const start = longPressStartRef.current;
+    if (!start || longPressTimerRef.current == null) return;
+    const dx = Math.abs(clientX - start.x);
+    const dy = Math.abs(clientY - start.y);
+    if (dx > 10 || dy > 10) clearLongPressTimer();
+  }
+
+  function deleteOneChat(id: string) {
+    if (id === "welcome") return;
+    if (
+      !window.confirm(
+        "이 대화를 삭제할까요?\n저장된 지출 내역은 그대로 둡니다.",
+      )
+    ) {
+      return;
+    }
+    setMessages((prev) => {
+      const next = prev.filter((m) => m.id !== id);
+      return next.length > 0 ? next : [WELCOME_MESSAGE];
+    });
+    setContextMessageId(null);
+    setSelectedChatIds((prev) => prev.filter((x) => x !== id));
+  }
+
+  // 길게 누르기 메뉴: 다른 곳 탭하면 닫기
+  useEffect(() => {
+    if (!contextMessageId) return;
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.("[data-chat-context]")) return;
+      setContextMessageId(null);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [contextMessageId]);
+
+  useEffect(() => {
+    return () => clearLongPressTimer();
+  }, []);
 
   async function commitPending(expense: PendingExpense) {
     const saved = await saveExpense(expense);
@@ -1504,40 +1570,75 @@ export default function Home() {
               const selectable =
                 chatSelectMode && message.id !== "welcome";
               const selected = selectedChatIds.includes(message.id);
+              const showDelete =
+                !chatSelectMode &&
+                contextMessageId === message.id &&
+                message.id !== "welcome";
+              const bubbleClass = `whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-left text-[15px] leading-relaxed transition-shadow select-none ${
+                message.id === "welcome"
+                  ? "w-full max-w-full"
+                  : "max-w-[85%]"
+              } ${
+                message.role === "user"
+                  ? "rounded-br-md bg-[#FEE500] text-[#191919]"
+                  : "rounded-bl-md bg-white text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+              } ${selectable ? "cursor-pointer" : ""} ${
+                selected || showDelete
+                  ? "ring-2 ring-[#1d1d1f] ring-offset-2 ring-offset-[#f5f5f7]"
+                  : ""
+              }`;
+
               return (
                 <li
                   key={message.id}
-                  className={`flex ${
-                    message.role === "user" ? "justify-end" : "justify-start"
+                  data-chat-context={showDelete ? "1" : undefined}
+                  className={`flex flex-col gap-1.5 ${
+                    message.role === "user" ? "items-end" : "items-start"
                   }`}
                 >
-                  <button
-                    type="button"
-                    disabled={!selectable}
-                    onClick={() => toggleChatSelect(message.id)}
-                    className={`whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-left text-[15px] leading-relaxed transition-shadow ${
-                      message.id === "welcome"
-                        ? "w-full max-w-full"
-                        : "max-w-[85%]"
-                    } ${
-                      message.role === "user"
-                        ? "rounded-br-md bg-[#FEE500] text-[#191919]"
-                        : "rounded-bl-md bg-white text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-                    } ${
-                      selectable ? "cursor-pointer" : ""
-                    } ${
-                      selected
-                        ? "ring-2 ring-[#1d1d1f] ring-offset-2 ring-offset-[#f5f5f7]"
-                        : ""
-                    }`}
-                  >
-                    {selectable && (
+                  {selectable ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleChatSelect(message.id)}
+                      className={bubbleClass}
+                    >
                       <span className="mb-1 block text-[11px] text-[#86868b]">
                         {selected ? "선택됨" : "탭하여 선택"}
                       </span>
-                    )}
-                    {message.content}
-                  </button>
+                      {message.content}
+                    </button>
+                  ) : (
+                    <div
+                      role="presentation"
+                      onPointerDown={(e) => {
+                        if (e.button !== 0) return;
+                        startLongPress(message.id, e.clientX, e.clientY);
+                      }}
+                      onPointerMove={(e) =>
+                        onLongPressMove(e.clientX, e.clientY)
+                      }
+                      onPointerUp={clearLongPressTimer}
+                      onPointerCancel={clearLongPressTimer}
+                      onContextMenu={(e) => {
+                        if (message.id === "welcome" || sending) return;
+                        e.preventDefault();
+                        clearLongPressTimer();
+                        setContextMessageId(message.id);
+                      }}
+                      className={bubbleClass}
+                    >
+                      {message.content}
+                    </div>
+                  )}
+                  {showDelete && (
+                    <button
+                      type="button"
+                      onClick={() => deleteOneChat(message.id)}
+                      className="rounded-full bg-[#ff3b30] px-3.5 py-1.5 text-[13px] font-medium text-white shadow-[0_2px_8px_rgba(0,0,0,0.12)]"
+                    >
+                      삭제
+                    </button>
+                  )}
                 </li>
               );
             })}
