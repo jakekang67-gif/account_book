@@ -15,13 +15,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI 가계부 챗봇",
-  description: "대화하듯 지출을 기록하는 AI 가계부",
-  applicationName: "AI 가계부",
+  title: "AI 챗가계부",
+  description: "채팅으로 정리하는 AI 스마트 가계부",
+  applicationName: "AI 챗가계부",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "AI 가계부",
+    title: "AI 챗가계부",
   },
   formatDetection: {
     telephone: false,

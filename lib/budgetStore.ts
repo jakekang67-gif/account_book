@@ -27,6 +27,26 @@ export async function loadMonthlyBudget(month: string): Promise<{
   };
 }
 
+/** 저장된 월 예산 전체 (최신 월 위) */
+export async function loadMonthlyBudgets(): Promise<{
+  budgets: MonthlyBudget[];
+  error: string | null;
+}> {
+  const { data, error } = await supabase
+    .from("monthly_budgets")
+    .select("id, month, amount")
+    .order("month", { ascending: false });
+
+  if (error) {
+    return { budgets: [], error: error.message };
+  }
+
+  return {
+    budgets: (data as MonthlyBudget[]) ?? [],
+    error: null,
+  };
+}
+
 /** 월 예산 저장(없으면 추가, 있으면 수정) */
 export async function saveMonthlyBudget(
   month: string,

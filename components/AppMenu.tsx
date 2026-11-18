@@ -17,7 +17,7 @@ import {
 type AppMenuProps = {
   expenses: ExcelExpenseRow[];
   onOpenCategoryEditor?: () => void;
-  onOpenBudgetEditor?: () => void;
+  onOpenBudgetList?: () => void;
   accountEmail?: string | null;
   onSignOut?: () => void;
 };
@@ -25,7 +25,7 @@ type AppMenuProps = {
 export function AppMenu({
   expenses,
   onOpenCategoryEditor,
-  onOpenBudgetEditor,
+  onOpenBudgetList,
   accountEmail,
   onSignOut,
 }: AppMenuProps) {
@@ -36,7 +36,7 @@ export function AppMenu({
         expenses={expenses}
         googleEnabled={false}
         onOpenCategoryEditor={onOpenCategoryEditor}
-        onOpenBudgetEditor={onOpenBudgetEditor}
+        onOpenBudgetList={onOpenBudgetList}
         accountEmail={accountEmail}
         onSignOut={onSignOut}
       />
@@ -46,7 +46,7 @@ export function AppMenu({
     <MenuWithGoogle
       expenses={expenses}
       onOpenCategoryEditor={onOpenCategoryEditor}
-      onOpenBudgetEditor={onOpenBudgetEditor}
+      onOpenBudgetList={onOpenBudgetList}
       accountEmail={accountEmail}
       onSignOut={onSignOut}
     />
@@ -56,7 +56,7 @@ export function AppMenu({
 function MenuWithGoogle({
   expenses,
   onOpenCategoryEditor,
-  onOpenBudgetEditor,
+  onOpenBudgetList,
   accountEmail,
   onSignOut,
 }: AppMenuProps) {
@@ -120,7 +120,7 @@ function MenuWithGoogle({
       setSession={setSession}
       onConnectGoogle={() => login()}
       onOpenCategoryEditor={onOpenCategoryEditor}
-      onOpenBudgetEditor={onOpenBudgetEditor}
+      onOpenBudgetList={onOpenBudgetList}
       accountEmail={accountEmail}
       onSignOut={onSignOut}
     />
@@ -138,7 +138,7 @@ function MenuPanel({
   setSession: setSessionProp,
   onConnectGoogle,
   onOpenCategoryEditor,
-  onOpenBudgetEditor,
+  onOpenBudgetList,
   accountEmail,
   onSignOut,
 }: AppMenuProps & {
@@ -295,11 +295,11 @@ function MenuPanel({
                 disabled={busy}
                 onClick={() => {
                   setOpen(false);
-                  onOpenBudgetEditor?.();
+                  onOpenBudgetList?.();
                 }}
                 className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
               >
-                월 예산 설정
+                월 예산 목록
               </button>
             </li>
             <li>

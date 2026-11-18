@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AppMenu } from "@/components/AppMenu";
 import { useAuth } from "@/components/AuthProvider";
 import { BudgetEditor } from "@/components/BudgetEditor";
-import { BudgetStatus } from "@/components/BudgetStatus";
+import { BudgetList } from "@/components/BudgetList";
 import { CategoryEditor } from "@/components/CategoryEditor";
 import { CategoryPieChart } from "@/components/CategoryPieChart";
 import { LoginForm } from "@/components/LoginForm";
@@ -12,9 +12,16 @@ import { MonthlyBarChart } from "@/components/MonthlyBarChart";
 import { ReceiptUploadButton } from "@/components/ReceiptUploadButton";
 import { VoiceMicButton } from "@/components/VoiceMicButton";
 import {
+  loadBudgetAlertPercent,
+  playBudgetWarningSound,
+  saveBudgetAlertPercent,
+} from "@/lib/budgetAlert";
+import {
   clearMonthlyBudget,
   loadMonthlyBudget,
+  loadMonthlyBudgets,
   saveMonthlyBudget,
+  type MonthlyBudget,
 } from "@/lib/budgetStore";
 import {
   DEFAULT_CATEGORY_TREE,
@@ -227,9 +234,17 @@ export default function Home() {
     useState<CategoryTree>(DEFAULT_CATEGORY_TREE);
   const [categoryRows, setCategoryRows] = useState<CategoryItemRow[]>([]);
   const [categoryEditorOpen, setCategoryEditorOpen] = useState(false);
+  const [budgetListOpen, setBudgetListOpen] = useState(false);
   const [budgetEditorOpen, setBudgetEditorOpen] = useState(false);
+  const [editingBudgetMonth, setEditingBudgetMonth] = useState("");
+  const [editingBudgetAmount, setEditingBudgetAmount] = useState<number | null>(
+    null,
+  );
   const [monthBudget, setMonthBudget] = useState<number | null>(null);
+  const [budgetRows, setBudgetRows] = useState<MonthlyBudget[]>([]);
+  const [budgetListLoading, setBudgetListLoading] = useState(false);
   const [budgetError, setBudgetError] = useState<string | null>(null);
+  const [budgetAlertPercent, setBudgetAlertPercent] = useState(80);
   const [categoryLoadError, setCategoryLoadError] = useState<string | null>(
     null,
   );
@@ -237,6 +252,8 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const budgetAlertReadyRef = useRef(false);
+  const budgetWasOverRef = useRef(false);
 
   const categoryOptions = useMemo(
     () => Object.keys(categoryTree),
@@ -283,6 +300,7 @@ export default function Home() {
     const today = koreaToday();
     setTodayMax(today);
     setCurrentMonth(today.slice(0, 7));
+    setBudgetAlertPercent(loadBudgetAlertPercent());
   }, []);
 
   useEffect(() => {
@@ -293,7 +311,10 @@ export default function Home() {
       setLoadingExpenses(false);
       setCategoryLoadError(null);
       setMonthBudget(null);
+      setBudgetRows([]);
       setBudgetError(null);
+      budgetAlertReadyRef.current = false;
+      budgetWasOverRef.current = false;
       return;
     }
     void loadExpenses();
@@ -302,8 +323,36 @@ export default function Home() {
 
   useEffect(() => {
     if (!user || !currentMonth) return;
+    budgetAlertReadyRef.current = false;
+    budgetWasOverRef.current = false;
     void refreshBudget();
   }, [user?.id, currentMonth]);
+
+  // 이번 달 지출이 경고 기준 %에 처음 도달하면 경고음
+  useEffect(() => {
+    if (!currentMonth || monthBudget == null || monthBudget <= 0) return;
+    if (loadingExpenses) return;
+
+    const percent = (thisMonthSpent / monthBudget) * 100;
+    const over = percent >= budgetAlertPercent;
+
+    if (!budgetAlertReadyRef.current) {
+      budgetWasOverRef.current = over;
+      budgetAlertReadyRef.current = true;
+      return;
+    }
+
+    if (over && !budgetWasOverRef.current) {
+      playBudgetWarningSound();
+    }
+    budgetWasOverRef.current = over;
+  }, [
+    thisMonthSpent,
+    monthBudget,
+    currentMonth,
+    budgetAlertPercent,
+    loadingExpenses,
+  ]);
 
   useEffect(() => {
     // 환영 안내만 있을 때는 맨 위가 보이도록 (모바일에서 잘림 방지)
@@ -343,6 +392,31 @@ export default function Home() {
     }
     setBudgetError(null);
     setMonthBudget(result.budget?.amount ?? null);
+  }
+
+  async function refreshBudgetList() {
+    setBudgetListLoading(true);
+    const result = await loadMonthlyBudgets();
+    setBudgetListLoading(false);
+    if (result.error) {
+      setBudgetError(result.error);
+      setBudgetRows([]);
+      return;
+    }
+    setBudgetError(null);
+    setBudgetRows(result.budgets);
+  }
+
+  function openBudgetEditor(month: string, amount: number | null) {
+    if (!month) return;
+    setEditingBudgetMonth(month);
+    setEditingBudgetAmount(amount);
+    setBudgetEditorOpen(true);
+  }
+
+  async function openBudgetList() {
+    setBudgetListOpen(true);
+    await refreshBudgetList();
   }
 
   async function loadExpenses() {
@@ -830,7 +904,7 @@ export default function Home() {
   const total = expenses.reduce((sum, item) => sum + item.amount, 0);
 
   const tabTitle =
-    tab === "chat" ? "AI 가계부 챗봇" : tab === "monthly" ? "월별 지출" : "카테고리별 지출";
+    tab === "chat" ? "AI 챗가계부" : tab === "monthly" ? "월별 지출" : "카테고리별 지출";
 
   if (authLoading) {
     return (
@@ -857,7 +931,7 @@ export default function Home() {
             <AppMenu
               expenses={expenses}
               onOpenCategoryEditor={() => setCategoryEditorOpen(true)}
-              onOpenBudgetEditor={() => setBudgetEditorOpen(true)}
+              onOpenBudgetList={() => void openBudgetList()}
               accountEmail={user.email}
               onSignOut={() => void signOut()}
             />
@@ -882,15 +956,6 @@ export default function Home() {
 
         {tab === "chat" && (
           <>
-        {currentMonth ? (
-          <BudgetStatus
-            monthLabel={formatMonthLabel(currentMonth)}
-            spent={thisMonthSpent}
-            budget={monthBudget}
-            onEdit={() => setBudgetEditorOpen(true)}
-          />
-        ) : null}
-
         {/* 저장된 지출 카드 */}
         <section className="shrink-0 border-b border-black/5 bg-[#f5f5f7] px-4 py-3">
           <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
@@ -1307,23 +1372,59 @@ export default function Home() {
         onChanged={refreshCategories}
       />
 
+      <BudgetList
+        open={budgetListOpen}
+        rows={budgetRows}
+        currentMonth={currentMonth}
+        alertPercent={budgetAlertPercent}
+        loading={budgetListLoading}
+        error={budgetError}
+        onClose={() => setBudgetListOpen(false)}
+        onSelect={(month, amount) => {
+          setBudgetListOpen(false);
+          openBudgetEditor(month, amount);
+        }}
+        onAddCurrent={() => {
+          setBudgetListOpen(false);
+          openBudgetEditor(currentMonth, monthBudget);
+        }}
+        onAlertPercentChange={(percent) => {
+          const next = saveBudgetAlertPercent(percent);
+          setBudgetAlertPercent(next);
+          // 기준을 바꾸면, 이미 넘긴 상태여도 다시 아래에서 올라올 때만 울리도록 초기화
+          budgetAlertReadyRef.current = false;
+        }}
+      />
+
       <BudgetEditor
         open={budgetEditorOpen}
-        month={currentMonth}
-        currentAmount={monthBudget}
+        month={editingBudgetMonth}
+        currentAmount={editingBudgetAmount}
         onClose={() => setBudgetEditorOpen(false)}
         onSave={async (amount) => {
-          const result = await saveMonthlyBudget(currentMonth, amount);
+          const month = editingBudgetMonth;
+          if (!month) return "월 정보가 없습니다.";
+          const result = await saveMonthlyBudget(month, amount);
           if (result.error) return result.error;
-          setMonthBudget(result.budget?.amount ?? amount);
+          setEditingBudgetAmount(result.budget?.amount ?? amount);
+          if (month === currentMonth) {
+            setMonthBudget(result.budget?.amount ?? amount);
+          }
           setBudgetError(null);
+          void refreshBudgetList();
           return null;
         }}
         onClear={async () => {
-          const result = await clearMonthlyBudget(currentMonth);
+          const month = editingBudgetMonth;
+          if (!month) return "월 정보가 없습니다.";
+          const result = await clearMonthlyBudget(month);
           if (result.error) return result.error;
-          setMonthBudget(null);
+          setEditingBudgetAmount(null);
+          if (month === currentMonth) {
+            setMonthBudget(null);
+          }
           setBudgetError(null);
+          void refreshBudgetList();
           return null;
         }}
       />

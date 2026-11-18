@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       to,
       subject: `가계부 내보내기 - ${fileName}`,
       bodyText:
-        "AI 가계부에서 보낸 지출 내역 엑셀 파일입니다.\n첨부파일을 확인해 주세요.",
+        "AI 챗가계부에서 보낸 지출 내역 엑셀 파일입니다.\n첨부파일을 확인해 주세요.",
       fileName,
       fileBase64,
     });
