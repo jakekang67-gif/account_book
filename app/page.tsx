@@ -10,7 +10,6 @@ import { CategoryEditor } from "@/components/CategoryEditor";
 import { CategoryPieChart } from "@/components/CategoryPieChart";
 import { LoginForm } from "@/components/LoginForm";
 import { MonthlyBarChart } from "@/components/MonthlyBarChart";
-import { ReceiptUploadButton } from "@/components/ReceiptUploadButton";
 import { VoiceMicButton } from "@/components/VoiceMicButton";
 import {
   loadBudgetAlertPercent,
@@ -219,7 +218,7 @@ export default function Home() {
       id: "welcome",
       role: "assistant",
       content:
-        "안녕하세요! 지출을 말해 주세요.\n예: “오늘 점심 12,000원”\n마이크·영수증 사진도 가능해요.\n저장 전 분류를 확인받고, 통계도 물어보실 수 있어요.",
+        "지출을 말해 주세요!\n예를들면 “오늘 점심 12,000원”처럼 짧게!\n저장 전 분류를 확인받고, 통계도 물어보실 수 있어요.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -608,79 +607,6 @@ export default function Home() {
     setPendingExpense(null);
     setPendingPhase(null);
     pushAssistant(formatSavedReply(expense));
-  }
-
-  async function handleReceiptUpload(payload: {
-    base64: string;
-    mimeType: string;
-  }) {
-    if (sending) return;
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: createMessageId(),
-        role: "user",
-        content: "영수증 사진을 올렸어요.",
-      },
-    ]);
-    setSending(true);
-    setChatError(null);
-    setPendingExpense(null);
-    setPendingPhase(null);
-
-    try {
-      const response = await fetch("/api/receipt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageBase64: payload.base64,
-          mimeType: payload.mimeType,
-          categoryTree,
-        }),
-      });
-
-      const data = (await response.json()) as {
-        reply?: string;
-        expense?: PendingExpense | null;
-        error?: string;
-      };
-
-      if (!response.ok) {
-        throw new Error(
-          data.error ?? "영수증 인식에 실패했습니다. 잠시 후 다시 시도해 주세요.",
-        );
-      }
-
-      if (data.expense) {
-        const next: PendingExpense = {
-          date: data.expense.date,
-          amount: data.expense.amount,
-          description: data.expense.description,
-          category: data.expense.category,
-          subcategory: data.expense.subcategory,
-        };
-        setPendingExpense(next);
-        setPendingPhase("confirm");
-        pushAssistant(data.reply?.trim() || formatAskConfirmReply(next));
-        return;
-      }
-
-      pushAssistant(
-        data.reply?.trim() ||
-          "영수증에서 금액을 찾지 못했어요. 직접 말해 주시거나 다시 올려 주세요.",
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "영수증 업로드에 실패했습니다.";
-      setChatError(message);
-      pushAssistant(message);
-    } finally {
-      setSending(false);
-      inputRef.current?.focus();
-    }
   }
 
   async function handleSend(event?: FormEvent, overrideText?: string) {
@@ -1189,13 +1115,8 @@ export default function Home() {
           )}
           <form
             onSubmit={(e) => handleSend(e)}
-            className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-end gap-1.5 pb-2"
+            className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-1.5 pb-2"
           >
-            <ReceiptUploadButton
-              disabled={sending}
-              onError={(message) => setChatError(message)}
-              onPick={(payload) => void handleReceiptUpload(payload)}
-            />
             <VoiceMicButton
               disabled={sending}
               onError={(message) => setChatError(message)}

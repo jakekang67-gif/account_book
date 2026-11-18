@@ -26,8 +26,16 @@ type GeminiChatResponse = {
   expense: ExpensePayload | null;
 };
 
-/** Google AI Studio 권장 최신 flash 모델 */
-const MODEL_CANDIDATES = ["gemini-3.8-flash"] as const;
+/**
+ * 호출 후보 모델 (앞에서부터 시도).
+ * 1순위 Busy/오류 시 예비 모델로 넘어가 응답 가능성을 높입니다.
+ */
+const MODEL_CANDIDATES = [
+  "gemini-3.8-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.6-flash",
+  "gemini-3.1-flash-lite",
+] as const;
 
 function formatKoreanAskConfirm(expense: ExpensePayload) {
   const [, m, d] = expense.date.split("-");
@@ -209,9 +217,11 @@ async function generateWithFallback(
       return result.response.text();
     } catch (error) {
       lastError = error;
+      // 없는 모델이면 바로 다음 후보
       if (isModelMissingError(error)) {
         continue;
       }
+      // Busy·한도면 같은 모델 1회 재시도 후, 실패 시 다음 후보
       if (isRetryableError(error)) {
         await sleep(1_200);
         try {
@@ -219,8 +229,11 @@ async function generateWithFallback(
           return result.response.text();
         } catch (retryError) {
           lastError = retryError;
+          continue;
         }
       }
+      // 그 외 오류도 다음 후보로 시도
+      continue;
     }
   }
 
