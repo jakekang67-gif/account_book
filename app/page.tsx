@@ -322,6 +322,9 @@ export default function Home() {
   const [chatCleanupOpen, setChatCleanupOpen] = useState(false);
   const [appMenuOpen, setAppMenuOpen] = useState(false);
   const [chatNoticeShowRequestId, setChatNoticeShowRequestId] = useState(0);
+  /** 앱 열 때 환영 안내를 잠깐만 표시 */
+  const [showWelcomeTip, setShowWelcomeTip] = useState(true);
+  const [welcomeTipEpoch, setWelcomeTipEpoch] = useState(0);
   const [chatSelectMode, setChatSelectMode] = useState(false);
   const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
   /** 길게 눌러 단일 삭제·수정 대상 */
@@ -334,6 +337,7 @@ export default function Home() {
   const [saveToDateBusy, setSaveToDateBusy] = useState(false);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
+  const leftToBackgroundRef = useRef(false);
   const [budgetListOpen, setBudgetListOpen] = useState(false);
   const [budgetEditorOpen, setBudgetEditorOpen] = useState(false);
   const [editingBudgetMonth, setEditingBudgetMonth] = useState("");
@@ -403,10 +407,21 @@ export default function Home() {
     setBudgetAlertPercent(loadBudgetAlertPercent());
   }, []);
 
+  // 환영 안내: 앱을 열 때(또는 다시 돌아올 때) 약 4초만 표시
+  useEffect(() => {
+    if (!user?.id) return;
+    setShowWelcomeTip(true);
+    const timer = window.setTimeout(() => {
+      setShowWelcomeTip(false);
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [user?.id, welcomeTipEpoch]);
+
   // 앱을 백그라운드로 내릴 때: 진행 중 요청을 실패 문구로 남기지 않고 초안에 보존
   useEffect(() => {
     function flushLeavingDraft() {
       pageLeavingRef.current = true;
+      leftToBackgroundRef.current = true;
       if (!user?.id || !sendingRef.current) return;
       const lastUser = [...messages]
         .reverse()
@@ -425,6 +440,10 @@ export default function Home() {
     function onVisible() {
       if (document.visibilityState === "visible") {
         pageLeavingRef.current = false;
+        if (leftToBackgroundRef.current) {
+          leftToBackgroundRef.current = false;
+          setWelcomeTipEpoch((n) => n + 1);
+        }
       } else {
         flushLeavingDraft();
       }
@@ -948,6 +967,7 @@ export default function Home() {
     setContextMessageId(null);
     setEditingMessageId(null);
     setEditDraft("");
+    setWelcomeTipEpoch((n) => n + 1);
     skipNextUserAppendRef.current = false;
     preserveSendingDraftRef.current = false;
     if (user?.id) {
@@ -1989,6 +2009,9 @@ export default function Home() {
           )}
           <ul className="flex flex-col gap-3">
             {messages.map((message) => {
+              if (message.id === "welcome" && !showWelcomeTip) {
+                return null;
+              }
               const selectable =
                 chatSelectMode && message.id !== "welcome";
               const selected = selectedChatIds.includes(message.id);
@@ -2001,7 +2024,7 @@ export default function Home() {
                 !chatSelectMode && editingMessageId === message.id;
               const bubbleClass = `whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-left text-[15px] leading-relaxed transition-shadow select-none ${
                 message.id === "welcome"
-                  ? "w-full max-w-full"
+                  ? "w-full max-w-full transition-opacity duration-500"
                   : "max-w-[85%]"
               } ${
                 message.role === "user"
@@ -2021,6 +2044,10 @@ export default function Home() {
                   }
                   className={`flex flex-col gap-1.5 ${
                     message.role === "user" ? "items-end" : "items-start"
+                  } ${
+                    message.id === "welcome"
+                      ? "transition-opacity duration-500"
+                      : ""
                   }`}
                 >
                   {selectable ? (
