@@ -215,6 +215,41 @@ const WELCOME_MESSAGE: ChatMessage = {
     "안녕하세요. 지출을 말씀해 주세요!\n예를들면 “오늘 점심 12,000원”처럼 짧게!\n저장 전 분류 확인, 통계도 물어보실 수 있어요.",
 };
 
+function isTransientNetworkError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const msg = error.message.toLowerCase();
+  return (
+    error.name === "AbortError" ||
+    msg.includes("failed to fetch") ||
+    msg.includes("networkerror") ||
+    msg.includes("load failed") ||
+    msg.includes("aborted")
+  );
+}
+
+function formatChatSendError(error: unknown) {
+  if (isTransientNetworkError(error)) {
+    return "네트워크가 잠시 끊겼어요. 같은 내용을 다시 보내 주세요.";
+  }
+  if (error instanceof Error && error.message.trim()) {
+    // 영어 Failed to fetch 등은 위에서 걸러짐. 서버 한글 메시지는 그대로.
+    if (/^[A-Za-z0-9 _\-.:'"[\]]+$/.test(error.message)) {
+      return "전송에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+    }
+    return error.message;
+  }
+  return "전송에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+}
+
+function scrubDraftMessages(messages: ChatMessage[]) {
+  return messages.filter((m) => {
+    if (m.content === "Failed to fetch") return false;
+    if (m.content.includes("다시 보내는 중이에요")) return false;
+    if (m.content.includes("네트워크가 잠시 끊겼어요")) return false;
+    return true;
+  });
+}
+
 export default function Home() {
   const { user, loading: authLoading, signOut } = useAuth();
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -236,6 +271,11 @@ export default function Home() {
   const [resumeSendText, setResumeSendText] = useState<string | null>(null);
   const chatDraftReadyRef = useRef(false);
   const skipNextUserAppendRef = useRef(false);
+  const pageLeavingRef = useRef(false);
+  const sendingRef = useRef(false);
+  const lastSendTextRef = useRef<string | null>(null);
+  /** 앱을 나가며 요청이 끊긴 경우, 초안의 wasSending을 유지 */
+  const preserveSendingDraftRef = useRef(false);
   const [tab, setTab] = useState<AppTab>("chat");
   const [reportMonth, setReportMonth] = useState("");
   const [categoryTree, setCategoryTree] =
@@ -312,6 +352,41 @@ export default function Home() {
     setBudgetAlertPercent(loadBudgetAlertPercent());
   }, []);
 
+  // 앱을 백그라운드로 내릴 때: 진행 중 요청을 실패 문구로 남기지 않고 초안에 보존
+  useEffect(() => {
+    function flushLeavingDraft() {
+      pageLeavingRef.current = true;
+      if (!user?.id || !sendingRef.current) return;
+      const lastUser = [...messages]
+        .reverse()
+        .find((m) => m.role === "user");
+      preserveSendingDraftRef.current = true;
+      saveChatDraft(user.id, {
+        messages: scrubDraftMessages(messages),
+        pendingExpense,
+        pendingPhase,
+        input,
+        wasSending: true,
+        lastUserText: lastSendTextRef.current ?? lastUser?.content ?? null,
+      });
+    }
+
+    function onVisible() {
+      if (document.visibilityState === "visible") {
+        pageLeavingRef.current = false;
+      } else {
+        flushLeavingDraft();
+      }
+    }
+
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pagehide", flushLeavingDraft);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pagehide", flushLeavingDraft);
+    };
+  }, [user?.id, messages, pendingExpense, pendingPhase, input]);
+
   useEffect(() => {
     if (!user) {
       setExpenses([]);
@@ -342,17 +417,27 @@ export default function Home() {
     chatDraftReadyRef.current = false;
     const draft = loadChatDraft(previousUserId);
     if (draft && draft.messages.length > 0) {
-      // 환영 문구는 최신 문구로 맞춤
-      const restored = (draft.messages as ChatMessage[]).map((m) =>
-        m.id === "welcome" ? { ...m, content: WELCOME_MESSAGE.content } : m,
+      // 환영 문구는 최신 문구로 맞춤, 끊김 오류 문구는 제거
+      const restored = scrubDraftMessages(
+        (draft.messages as ChatMessage[]).map((m) =>
+          m.id === "welcome" ? { ...m, content: WELCOME_MESSAGE.content } : m,
+        ),
       );
-      setMessages(restored);
+      setMessages(restored.length > 0 ? restored : [WELCOME_MESSAGE]);
       setPendingExpense(draft.pendingExpense);
       setPendingPhase(draft.pendingPhase);
       setInput(draft.input || "");
-      if (draft.wasSending && draft.lastUserText?.trim()) {
+      const last = restored[restored.length - 1];
+      const resumeText =
+        draft.lastUserText?.trim() ||
+        (last?.role === "user" ? last.content.trim() : "");
+      // 생각 중 끊김: wasSending 이거나, 마지막이 사용자 말만 남은 경우 재시도
+      if (
+        resumeText &&
+        (draft.wasSending || last?.role === "user")
+      ) {
         skipNextUserAppendRef.current = true;
-        setResumeSendText(draft.lastUserText.trim());
+        setResumeSendText(resumeText);
       }
     } else {
       setMessages([WELCOME_MESSAGE]);
@@ -368,16 +453,19 @@ export default function Home() {
     if (!user?.id || !chatDraftReadyRef.current) return;
     // 복구 직후 재전송 예약 중이면 wasSending을 덮어쓰지 않음
     if (resumeSendText) return;
+    if (preserveSendingDraftRef.current) return;
     const lastUser = [...messages]
       .reverse()
       .find((m) => m.role === "user");
     saveChatDraft(user.id, {
-      messages,
+      messages: scrubDraftMessages(messages),
       pendingExpense,
       pendingPhase,
       input,
       wasSending: sending,
-      lastUserText: sending ? (lastUser?.content ?? null) : null,
+      lastUserText: sending
+        ? (lastSendTextRef.current ?? lastUser?.content ?? null)
+        : null,
     });
   }, [
     user?.id,
@@ -700,6 +788,8 @@ export default function Home() {
     }
     setInput("");
     setSending(true);
+    sendingRef.current = true;
+    lastSendTextRef.current = text;
     setChatError(null);
 
     try {
@@ -893,28 +983,72 @@ export default function Home() {
 
       pushAssistant(data.reply?.trim() || "네, 말씀해 주세요.");
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "전송에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+      // 앱을 나가며 요청이 끊긴 경우: Failed to fetch를 채팅에 남기지 않음
+      if (pageLeavingRef.current || document.visibilityState === "hidden") {
+        preserveSendingDraftRef.current = true;
+        if (user?.id) {
+          saveChatDraft(user.id, {
+            messages: scrubDraftMessages(messagesWithUser),
+            pendingExpense,
+            pendingPhase,
+            input: "",
+            wasSending: true,
+            lastUserText: text,
+          });
+        }
+        return;
+      }
+
+      const message = formatChatSendError(error);
       setChatError(message);
       pushAssistant(message);
     } finally {
+      sendingRef.current = false;
       setSending(false);
+      if (!pageLeavingRef.current) {
+        preserveSendingDraftRef.current = false;
+      }
       inputRef.current?.focus();
     }
   }
 
-  // 앱을 나갔다 왔을 때, 중단됐던 요청 자동 재전송
+  // 앱을 나갔다 왔을 때, 네트워크 준비 후 중단됐던 요청 재전송
   useEffect(() => {
     if (!resumeSendText || !user?.id) return;
     if (sending) return;
+
     const text = resumeSendText;
-    setResumeSendText(null);
-    pushAssistant(
-      "앱을 나갔다 와서, 방금 요청을 다시 보내는 중이에요...",
-    );
-    void handleSend(undefined, text);
+    let cancelled = false;
+
+    async function resume() {
+      // 백그라운드 복귀 직후 네트워크가 바로 안 붙는 경우 대비
+      for (let i = 0; i < 8; i++) {
+        if (cancelled) return;
+        if (
+          document.visibilityState === "visible" &&
+          typeof navigator !== "undefined" &&
+          navigator.onLine !== false
+        ) {
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      await new Promise((r) => setTimeout(r, 400));
+      if (cancelled) return;
+
+      setResumeSendText(null);
+      preserveSendingDraftRef.current = false;
+      skipNextUserAppendRef.current = true;
+      pushAssistant(
+        "앱을 나갔다 와서, 방금 요청을 다시 보내는 중이에요...",
+      );
+      void handleSend(undefined, text);
+    }
+
+    void resume();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 복구 시 1회 재전송
   }, [resumeSendText, user?.id]);
 
