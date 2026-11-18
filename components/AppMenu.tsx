@@ -19,6 +19,7 @@ type AppMenuProps = {
   onOpenCategoryEditor?: () => void;
   onOpenBudgetList?: () => void;
   onOpenInstallHelp?: () => void;
+  onOpenChatCleanup?: () => void;
   accountEmail?: string | null;
   onSignOut?: () => void;
 };
@@ -28,6 +29,7 @@ export function AppMenu({
   onOpenCategoryEditor,
   onOpenBudgetList,
   onOpenInstallHelp,
+  onOpenChatCleanup,
   accountEmail,
   onSignOut,
 }: AppMenuProps) {
@@ -40,6 +42,7 @@ export function AppMenu({
         onOpenCategoryEditor={onOpenCategoryEditor}
         onOpenBudgetList={onOpenBudgetList}
         onOpenInstallHelp={onOpenInstallHelp}
+        onOpenChatCleanup={onOpenChatCleanup}
         accountEmail={accountEmail}
         onSignOut={onSignOut}
       />
@@ -51,6 +54,7 @@ export function AppMenu({
       onOpenCategoryEditor={onOpenCategoryEditor}
       onOpenBudgetList={onOpenBudgetList}
       onOpenInstallHelp={onOpenInstallHelp}
+      onOpenChatCleanup={onOpenChatCleanup}
       accountEmail={accountEmail}
       onSignOut={onSignOut}
     />
@@ -62,6 +66,7 @@ function MenuWithGoogle({
   onOpenCategoryEditor,
   onOpenBudgetList,
   onOpenInstallHelp,
+  onOpenChatCleanup,
   accountEmail,
   onSignOut,
 }: AppMenuProps) {
@@ -127,6 +132,7 @@ function MenuWithGoogle({
       onOpenCategoryEditor={onOpenCategoryEditor}
       onOpenBudgetList={onOpenBudgetList}
       onOpenInstallHelp={onOpenInstallHelp}
+      onOpenChatCleanup={onOpenChatCleanup}
       accountEmail={accountEmail}
       onSignOut={onSignOut}
     />
@@ -146,6 +152,7 @@ function MenuPanel({
   onOpenCategoryEditor,
   onOpenBudgetList,
   onOpenInstallHelp,
+  onOpenChatCleanup,
   accountEmail,
   onSignOut,
 }: AppMenuProps & {
@@ -307,6 +314,19 @@ function MenuPanel({
                 className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
               >
                 월 예산 목록
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setOpen(false);
+                  onOpenChatCleanup?.();
+                }}
+                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
+              >
+                채팅 삭제
               </button>
             </li>
             <li>

@@ -3,10 +3,11 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AppMenu } from "@/components/AppMenu";
 import { useAuth } from "@/components/AuthProvider";
-import { InstallHelp } from "@/components/InstallHelp";
 import { BudgetEditor } from "@/components/BudgetEditor";
 import { BudgetList } from "@/components/BudgetList";
 import { CategoryEditor } from "@/components/CategoryEditor";
+import { ChatCleanupMenu } from "@/components/ChatCleanupMenu";
+import { InstallHelp } from "@/components/InstallHelp";
 import { CategoryPieChart } from "@/components/CategoryPieChart";
 import { LoginForm } from "@/components/LoginForm";
 import { MonthlyBarChart } from "@/components/MonthlyBarChart";
@@ -305,6 +306,9 @@ export default function Home() {
   const [categoryRows, setCategoryRows] = useState<CategoryItemRow[]>([]);
   const [categoryEditorOpen, setCategoryEditorOpen] = useState(false);
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
+  const [chatCleanupOpen, setChatCleanupOpen] = useState(false);
+  const [chatSelectMode, setChatSelectMode] = useState(false);
+  const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
   const [budgetListOpen, setBudgetListOpen] = useState(false);
   const [budgetEditorOpen, setBudgetEditorOpen] = useState(false);
   const [editingBudgetMonth, setEditingBudgetMonth] = useState("");
@@ -773,6 +777,63 @@ export default function Home() {
     ]);
   }
 
+  function clearAllChat() {
+    if (
+      !window.confirm(
+        "채팅 대화를 모두 삭제할까요?\n저장된 지출 내역은 그대로 둡니다.",
+      )
+    ) {
+      return;
+    }
+    setMessages([WELCOME_MESSAGE]);
+    setPendingExpense(null);
+    setPendingPhase(null);
+    setChatError(null);
+    setResumeSendText(null);
+    setChatSelectMode(false);
+    setSelectedChatIds([]);
+    skipNextUserAppendRef.current = false;
+    preserveSendingDraftRef.current = false;
+    if (user?.id) {
+      clearChatDraft(user.id);
+      saveChatDraft(user.id, {
+        messages: [WELCOME_MESSAGE],
+        pendingExpense: null,
+        pendingPhase: null,
+        input: "",
+        wasSending: false,
+        lastUserText: null,
+      });
+    }
+  }
+
+  function deleteSelectedChat() {
+    if (selectedChatIds.length === 0) return;
+    if (
+      !window.confirm(
+        `선택한 대화 ${selectedChatIds.length}개를 삭제할까요?\n저장된 지출 내역은 그대로 둡니다.`,
+      )
+    ) {
+      return;
+    }
+    const remove = new Set(selectedChatIds);
+    setMessages((prev) => {
+      const next = prev.filter(
+        (m) => m.id === "welcome" || !remove.has(m.id),
+      );
+      return next.length > 0 ? next : [WELCOME_MESSAGE];
+    });
+    setSelectedChatIds([]);
+    setChatSelectMode(false);
+  }
+
+  function toggleChatSelect(id: string) {
+    if (id === "welcome") return;
+    setSelectedChatIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
   async function commitPending(expense: PendingExpense) {
     const saved = await saveExpense(expense);
     if (!saved) {
@@ -1143,6 +1204,7 @@ export default function Home() {
               onOpenCategoryEditor={() => setCategoryEditorOpen(true)}
               onOpenBudgetList={() => void openBudgetList()}
               onOpenInstallHelp={() => setInstallHelpOpen(true)}
+              onOpenChatCleanup={() => setChatCleanupOpen(true)}
               accountEmail={user.email}
               onSignOut={() => void signOut()}
             />
@@ -1359,31 +1421,56 @@ export default function Home() {
           ref={chatScrollRef}
           className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
         >
+          {chatSelectMode && (
+            <p className="mb-3 text-center text-[12px] text-[#86868b]">
+              지울 대화를 선택한 뒤 아래 「선택 삭제」를 누르세요. (안내 문구는
+              유지됩니다)
+            </p>
+          )}
           <ul className="flex flex-col gap-3">
-            {messages.map((message) => (
-              <li
-                key={message.id}
-                className={`flex ${
-                  message.role === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div
-                  className={`whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-[15px] leading-relaxed ${
-                    message.id === "welcome"
-                      ? "w-full max-w-full"
-                      : "max-w-[85%]"
-                  } ${
-                    message.role === "user"
-                      ? "rounded-br-md bg-[#FEE500] text-[#191919]"
-                      : "rounded-bl-md bg-white text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+            {messages.map((message) => {
+              const selectable =
+                chatSelectMode && message.id !== "welcome";
+              const selected = selectedChatIds.includes(message.id);
+              return (
+                <li
+                  key={message.id}
+                  className={`flex ${
+                    message.role === "user" ? "justify-end" : "justify-start"
                   }`}
                 >
-                  {message.content}
-                </div>
-              </li>
-            ))}
+                  <button
+                    type="button"
+                    disabled={!selectable}
+                    onClick={() => toggleChatSelect(message.id)}
+                    className={`whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-left text-[15px] leading-relaxed transition-shadow ${
+                      message.id === "welcome"
+                        ? "w-full max-w-full"
+                        : "max-w-[85%]"
+                    } ${
+                      message.role === "user"
+                        ? "rounded-br-md bg-[#FEE500] text-[#191919]"
+                        : "rounded-bl-md bg-white text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                    } ${
+                      selectable ? "cursor-pointer" : ""
+                    } ${
+                      selected
+                        ? "ring-2 ring-[#1d1d1f] ring-offset-2 ring-offset-[#f5f5f7]"
+                        : ""
+                    }`}
+                  >
+                    {selectable && (
+                      <span className="mb-1 block text-[11px] text-[#86868b]">
+                        {selected ? "선택됨" : "탭하여 선택"}
+                      </span>
+                    )}
+                    {message.content}
+                  </button>
+                </li>
+              );
+            })}
 
-            {sending && (
+            {sending && !chatSelectMode && (
               <li className="flex justify-start">
                 <div className="w-full max-w-full rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 text-[14px] text-[#86868b] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
                   {sendingStatusText}
@@ -1396,39 +1483,69 @@ export default function Home() {
 
         {/* 하단 입력 — 좁은 화면에서도 전송이 한 줄에 보이도록 */}
         <div className="shrink-0 border-t border-black/5 bg-white px-2 pt-2 sm:px-3 sm:pt-3">
-          {chatError && (
-            <p className="mb-2 px-1 text-[12px] text-red-600">{chatError}</p>
+          {chatSelectMode ? (
+            <div className="flex gap-2 pb-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setChatSelectMode(false);
+                  setSelectedChatIds([]);
+                }}
+                className="flex-1 rounded-2xl bg-[#f5f5f7] py-2.5 text-[14px] font-medium text-[#1d1d1f]"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={selectedChatIds.length === 0}
+                onClick={deleteSelectedChat}
+                className="flex-1 rounded-2xl bg-[#1d1d1f] py-2.5 text-[14px] font-medium text-white disabled:opacity-35"
+              >
+                선택 삭제
+                {selectedChatIds.length > 0
+                  ? ` (${selectedChatIds.length})`
+                  : ""}
+              </button>
+            </div>
+          ) : (
+            <>
+              {chatError && (
+                <p className="mb-2 px-1 text-[12px] text-red-600">
+                  {chatError}
+                </p>
+              )}
+              <form
+                onSubmit={(e) => handleSend(e)}
+                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-1.5 pb-2"
+              >
+                <VoiceMicButton
+                  disabled={sending}
+                  onError={(message) => setChatError(message)}
+                  onTranscript={(text) => {
+                    setChatError(null);
+                    setInput(text);
+                    void handleSend(undefined, text);
+                  }}
+                />
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="예: 택시 20000원"
+                  disabled={sending}
+                  className="min-h-11 min-w-0 w-full rounded-2xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed] disabled:opacity-60 sm:px-4"
+                />
+                <button
+                  type="submit"
+                  disabled={sending || !input.trim()}
+                  className="min-h-11 shrink-0 rounded-2xl bg-[#1d1d1f] px-3 py-2.5 text-[13px] font-medium text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-35 sm:px-4 sm:text-[14px]"
+                >
+                  전송
+                </button>
+              </form>
+            </>
           )}
-          <form
-            onSubmit={(e) => handleSend(e)}
-            className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-1.5 pb-2"
-          >
-            <VoiceMicButton
-              disabled={sending}
-              onError={(message) => setChatError(message)}
-              onTranscript={(text) => {
-                setChatError(null);
-                setInput(text);
-                void handleSend(undefined, text);
-              }}
-            />
-            <input
-              ref={inputRef}
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="예: 택시 20000원"
-              disabled={sending}
-              className="min-h-11 min-w-0 w-full rounded-2xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed] disabled:opacity-60 sm:px-4"
-            />
-            <button
-              type="submit"
-              disabled={sending || !input.trim()}
-              className="min-h-11 shrink-0 rounded-2xl bg-[#1d1d1f] px-3 py-2.5 text-[13px] font-medium text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-35 sm:px-4 sm:text-[14px]"
-            >
-              전송
-            </button>
-          </form>
         </div>
           </>
         )}
@@ -1585,6 +1702,17 @@ export default function Home() {
       <InstallHelp
         open={installHelpOpen}
         onClose={() => setInstallHelpOpen(false)}
+      />
+
+      <ChatCleanupMenu
+        open={chatCleanupOpen}
+        onClose={() => setChatCleanupOpen(false)}
+        onClearAll={clearAllChat}
+        onStartSelect={() => {
+          setTab("chat");
+          setChatSelectMode(true);
+          setSelectedChatIds([]);
+        }}
       />
 
       <BudgetList
