@@ -327,6 +327,7 @@ export default function Home() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [copiedExpenseId, setCopiedExpenseId] = useState<number | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
   const [budgetListOpen, setBudgetListOpen] = useState(false);
@@ -1018,15 +1019,15 @@ export default function Home() {
     setEditDraft(content);
   }
 
-  async function copyChatMessage(id: string, content: string) {
-    const text = content.trim();
-    if (!text) return;
+  async function copyTextToClipboard(text: string) {
+    const value = text.trim();
+    if (!value) return false;
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(value);
       } else {
         const ta = document.createElement("textarea");
-        ta.value = text;
+        ta.value = value;
         ta.setAttribute("readonly", "");
         ta.style.position = "fixed";
         ta.style.left = "-9999px";
@@ -1035,14 +1036,47 @@ export default function Home() {
         document.execCommand("copy");
         document.body.removeChild(ta);
       }
-      setCopiedMessageId(id);
-      window.setTimeout(() => {
-        setCopiedMessageId((prev) => (prev === id ? null : prev));
-        setContextMessageId((prev) => (prev === id ? null : prev));
-      }, 900);
+      return true;
     } catch {
-      window.alert("복사에 실패했어요. 다시 시도해 주세요.");
+      return false;
     }
+  }
+
+  async function copyChatMessage(id: string, content: string) {
+    const ok = await copyTextToClipboard(content);
+    if (!ok) {
+      window.alert("복사에 실패했어요. 다시 시도해 주세요.");
+      return;
+    }
+    setCopiedMessageId(id);
+    window.setTimeout(() => {
+      setCopiedMessageId((prev) => (prev === id ? null : prev));
+      setContextMessageId((prev) => (prev === id ? null : prev));
+    }, 900);
+  }
+
+  async function copyExpense(item: Expense) {
+    const category =
+      item.category && item.subcategory
+        ? `${item.category}_${item.subcategory}`
+        : item.category || item.subcategory || "";
+    const text = [
+      item.date,
+      item.description,
+      `${formatAmount(item.amount)}원`,
+      category,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const ok = await copyTextToClipboard(text);
+    if (!ok) {
+      window.alert("복사에 실패했어요. 다시 시도해 주세요.");
+      return;
+    }
+    setCopiedExpenseId(item.id);
+    window.setTimeout(() => {
+      setCopiedExpenseId((prev) => (prev === item.id ? null : prev));
+    }, 900);
   }
 
   function cancelEditChat() {
@@ -1838,6 +1872,16 @@ export default function Home() {
                               className="flex gap-1.5"
                               onClick={(e) => e.stopPropagation()}
                             >
+                              <button
+                                type="button"
+                                onClick={() => void copyExpense(item)}
+                                disabled={isBusy || busyId !== null}
+                                className="rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[12px] font-medium text-[#5856d6] disabled:opacity-40"
+                              >
+                                {copiedExpenseId === item.id
+                                  ? "복사됨"
+                                  : "복사"}
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => startEdit(item)}
