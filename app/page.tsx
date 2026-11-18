@@ -314,8 +314,10 @@ export default function Home() {
   const [appMenuOpen, setAppMenuOpen] = useState(false);
   const [chatSelectMode, setChatSelectMode] = useState(false);
   const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
-  /** 길게 눌러 단일 삭제 대상 */
+  /** 길게 눌러 단일 삭제·수정 대상 */
   const [contextMessageId, setContextMessageId] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
   const longPressTimerRef = useRef<number | null>(null);
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
   const [budgetListOpen, setBudgetListOpen] = useState(false);
@@ -817,6 +819,8 @@ export default function Home() {
     setChatSelectMode(false);
     setSelectedChatIds([]);
     setContextMessageId(null);
+    setEditingMessageId(null);
+    setEditDraft("");
     skipNextUserAppendRef.current = false;
     preserveSendingDraftRef.current = false;
     if (user?.id) {
@@ -839,6 +843,8 @@ export default function Home() {
     setChatSelectMode(true);
     setSelectedChatIds([]);
     setContextMessageId(null);
+    setEditingMessageId(null);
+    setEditDraft("");
     if (fromChat) {
       pushAssistant(
         "지울 대화를 탭으로 고른 뒤 아래 「선택 삭제」를 눌러 주세요. 지출 내역은 그대로 둡니다.",
@@ -882,7 +888,9 @@ export default function Home() {
   }
 
   function startLongPress(id: string, clientX: number, clientY: number) {
-    if (chatSelectMode || id === "welcome" || sending) return;
+    if (chatSelectMode || editingMessageId || id === "welcome" || sending) {
+      return;
+    }
     clearLongPressTimer();
     longPressStartRef.current = { x: clientX, y: clientY };
     longPressTimerRef.current = window.setTimeout(() => {
@@ -914,10 +922,42 @@ export default function Home() {
       return next.length > 0 ? next : [WELCOME_MESSAGE];
     });
     setContextMessageId(null);
+    if (editingMessageId === id) {
+      setEditingMessageId(null);
+      setEditDraft("");
+    }
     setSelectedChatIds((prev) => prev.filter((x) => x !== id));
   }
 
-  // 길게 누르기 메뉴: 다른 곳 탭하면 닫기
+  function beginEditChat(id: string, content: string) {
+    if (id === "welcome") return;
+    setContextMessageId(null);
+    setEditingMessageId(id);
+    setEditDraft(content);
+  }
+
+  function cancelEditChat() {
+    setEditingMessageId(null);
+    setEditDraft("");
+  }
+
+  function saveEditChat() {
+    if (!editingMessageId) return;
+    const next = editDraft.trim();
+    if (!next) {
+      window.alert("내용을 입력해 주세요.");
+      return;
+    }
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === editingMessageId ? { ...m, content: next } : m,
+      ),
+    );
+    setEditingMessageId(null);
+    setEditDraft("");
+  }
+
+  // 길게 누르기 메뉴: 다른 곳 탭하면 닫기 (수정 중이면 유지)
   useEffect(() => {
     if (!contextMessageId) return;
     function onPointerDown(event: PointerEvent) {
@@ -1570,10 +1610,13 @@ export default function Home() {
               const selectable =
                 chatSelectMode && message.id !== "welcome";
               const selected = selectedChatIds.includes(message.id);
-              const showDelete =
+              const showActions =
                 !chatSelectMode &&
+                !editingMessageId &&
                 contextMessageId === message.id &&
                 message.id !== "welcome";
+              const isEditing =
+                !chatSelectMode && editingMessageId === message.id;
               const bubbleClass = `whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-left text-[15px] leading-relaxed transition-shadow select-none ${
                 message.id === "welcome"
                   ? "w-full max-w-full"
@@ -1583,7 +1626,7 @@ export default function Home() {
                   ? "rounded-br-md bg-[#FEE500] text-[#191919]"
                   : "rounded-bl-md bg-white text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
               } ${selectable ? "cursor-pointer" : ""} ${
-                selected || showDelete
+                selected || showActions || isEditing
                   ? "ring-2 ring-[#1d1d1f] ring-offset-2 ring-offset-[#f5f5f7]"
                   : ""
               }`;
@@ -1591,7 +1634,9 @@ export default function Home() {
               return (
                 <li
                   key={message.id}
-                  data-chat-context={showDelete ? "1" : undefined}
+                  data-chat-context={
+                    showActions || isEditing ? "1" : undefined
+                  }
                   className={`flex flex-col gap-1.5 ${
                     message.role === "user" ? "items-end" : "items-start"
                   }`}
@@ -1607,6 +1652,38 @@ export default function Home() {
                       </span>
                       {message.content}
                     </button>
+                  ) : isEditing ? (
+                    <div
+                      className={`w-full max-w-[85%] rounded-2xl px-3 py-2.5 ${
+                        message.role === "user"
+                          ? "rounded-br-md bg-[#FEE500]"
+                          : "rounded-bl-md bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                      } ring-2 ring-[#1d1d1f] ring-offset-2 ring-offset-[#f5f5f7]`}
+                    >
+                      <textarea
+                        value={editDraft}
+                        onChange={(e) => setEditDraft(e.target.value)}
+                        rows={3}
+                        autoFocus
+                        className="w-full resize-y rounded-xl bg-white/80 px-2.5 py-2 text-[15px] leading-relaxed text-[#1d1d1f] outline-none"
+                      />
+                      <div className="mt-2 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={cancelEditChat}
+                          className="rounded-full bg-black/5 px-3.5 py-1.5 text-[13px] font-medium text-[#1d1d1f]"
+                        >
+                          취소
+                        </button>
+                        <button
+                          type="button"
+                          onClick={saveEditChat}
+                          className="rounded-full bg-[#1d1d1f] px-3.5 py-1.5 text-[13px] font-medium text-white"
+                        >
+                          저장
+                        </button>
+                      </div>
+                    </div>
                   ) : (
                     <div
                       role="presentation"
@@ -1620,7 +1697,13 @@ export default function Home() {
                       onPointerUp={clearLongPressTimer}
                       onPointerCancel={clearLongPressTimer}
                       onContextMenu={(e) => {
-                        if (message.id === "welcome" || sending) return;
+                        if (
+                          message.id === "welcome" ||
+                          sending ||
+                          editingMessageId
+                        ) {
+                          return;
+                        }
                         e.preventDefault();
                         clearLongPressTimer();
                         setContextMessageId(message.id);
@@ -1630,14 +1713,25 @@ export default function Home() {
                       {message.content}
                     </div>
                   )}
-                  {showDelete && (
-                    <button
-                      type="button"
-                      onClick={() => deleteOneChat(message.id)}
-                      className="rounded-full bg-[#ff3b30] px-3.5 py-1.5 text-[13px] font-medium text-white shadow-[0_2px_8px_rgba(0,0,0,0.12)]"
-                    >
-                      삭제
-                    </button>
+                  {showActions && (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          beginEditChat(message.id, message.content)
+                        }
+                        className="rounded-full bg-[#1d1d1f] px-3.5 py-1.5 text-[13px] font-medium text-white shadow-[0_2px_8px_rgba(0,0,0,0.12)]"
+                      >
+                        수정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteOneChat(message.id)}
+                        className="rounded-full bg-[#ff3b30] px-3.5 py-1.5 text-[13px] font-medium text-white shadow-[0_2px_8px_rgba(0,0,0,0.12)]"
+                      >
+                        삭제
+                      </button>
+                    </div>
                   )}
                 </li>
               );
