@@ -28,13 +28,13 @@ type GeminiChatResponse = {
 
 /**
  * 호출 후보 모델 (앞에서부터 시도).
- * 1순위 Busy/오류 시 예비 모델로 넘어가 응답 가능성을 높입니다.
+ * 빠른 lite를 앞에 두어 대기 시간을 줄이고, Busy 시 다음 후보로 넘어갑니다.
  */
 const MODEL_CANDIDATES = [
-  "gemini-3.8-flash",
   "gemini-3.5-flash-lite",
-  "gemini-3.6-flash",
   "gemini-3.1-flash-lite",
+  "gemini-3.8-flash",
+  "gemini-3.6-flash",
 ] as const;
 
 function formatKoreanAskConfirm(expense: ExpensePayload) {
@@ -221,16 +221,10 @@ async function generateWithFallback(
       if (isModelMissingError(error)) {
         continue;
       }
-      // Busy·한도면 같은 모델 1회 재시도 후, 실패 시 다음 후보
+      // Busy·한도: 같은 모델에서 오래 붙잡지 않고 짧은 대기 후 다음 후보
       if (isRetryableError(error)) {
-        await sleep(1_200);
-        try {
-          const result = await model.generateContent({ contents });
-          return result.response.text();
-        } catch (retryError) {
-          lastError = retryError;
-          continue;
-        }
+        await sleep(350);
+        continue;
       }
       // 그 외 오류도 다음 후보로 시도
       continue;

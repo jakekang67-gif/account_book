@@ -241,13 +241,33 @@ function formatChatSendError(error: unknown) {
   return "전송에 실패했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
+function normalizeChatText(text: string) {
+  return text.trim().replace(/\s+/g, "");
+}
+
 function scrubDraftMessages(messages: ChatMessage[]) {
-  return messages.filter((m) => {
+  const cleaned = messages.filter((m) => {
     if (m.content === "Failed to fetch") return false;
     if (m.content.includes("다시 보내는 중이에요")) return false;
     if (m.content.includes("네트워크가 잠시 끊겼어요")) return false;
     return true;
   });
+
+  // 연속된 같은 사용자 말은 하나만 남김
+  const deduped: ChatMessage[] = [];
+  for (const m of cleaned) {
+    const prev = deduped[deduped.length - 1];
+    if (
+      prev &&
+      prev.role === "user" &&
+      m.role === "user" &&
+      normalizeChatText(prev.content) === normalizeChatText(m.content)
+    ) {
+      continue;
+    }
+    deduped.push(m);
+  }
+  return deduped;
 }
 
 export default function Home() {
@@ -263,6 +283,8 @@ export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendingTick, setSendingTick] = useState(0);
+  const [sendingStartedAt, setSendingStartedAt] = useState<number | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [pendingExpense, setPendingExpense] = useState<PendingExpense | null>(
     null,
@@ -779,12 +801,27 @@ export default function Home() {
       content: text,
     };
 
-    // 복구 재전송이면 사용자 문구가 이미 있으므로 다시 붙이지 않음
-    const messagesWithUser = alreadyAppended
+    // 복구·중복 전송이면 같은 사용자 말을 다시 붙이지 않음
+    const lastMsg = messages[messages.length - 1];
+    const sameAsLastUser =
+      lastMsg?.role === "user" &&
+      normalizeChatText(lastMsg.content) === normalizeChatText(text);
+    const skipAppend = alreadyAppended || sameAsLastUser;
+
+    const messagesWithUser = skipAppend
       ? messages
       : [...messages, userMessage];
-    if (!alreadyAppended) {
-      setMessages((prev) => [...prev, userMessage]);
+    if (!skipAppend) {
+      setMessages((prev) => {
+        const prevLast = prev[prev.length - 1];
+        if (
+          prevLast?.role === "user" &&
+          normalizeChatText(prevLast.content) === normalizeChatText(text)
+        ) {
+          return prev;
+        }
+        return [...prev, userMessage];
+      });
     }
     setInput("");
     setSending(true);
@@ -1012,7 +1049,7 @@ export default function Home() {
     }
   }
 
-  // 앱을 나갔다 왔을 때, 네트워크 준비 후 중단됐던 요청 재전송
+  // 앱을 나갔다 왔을 때, 짧게 기다린 뒤 중단됐던 요청 재전송 (안내 문구 없음)
   useEffect(() => {
     if (!resumeSendText || !user?.id) return;
     if (sending) return;
@@ -1021,8 +1058,7 @@ export default function Home() {
     let cancelled = false;
 
     async function resume() {
-      // 백그라운드 복귀 직후 네트워크가 바로 안 붙는 경우 대비
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 3; i++) {
         if (cancelled) return;
         if (
           document.visibilityState === "visible" &&
@@ -1031,17 +1067,14 @@ export default function Home() {
         ) {
           break;
         }
-        await new Promise((r) => setTimeout(r, 250));
+        await new Promise((r) => setTimeout(r, 120));
       }
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 150));
       if (cancelled) return;
 
       setResumeSendText(null);
       preserveSendingDraftRef.current = false;
       skipNextUserAppendRef.current = true;
-      pushAssistant(
-        "앱을 나갔다 와서, 방금 요청을 다시 보내는 중이에요...",
-      );
       void handleSend(undefined, text);
     }
 
@@ -1051,6 +1084,32 @@ export default function Home() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 복구 시 1회 재전송
   }, [resumeSendText, user?.id]);
+
+  // 생각 중 안내: 시간이 길면 문구 변경
+  useEffect(() => {
+    if (!sending) {
+      setSendingStartedAt(null);
+      setSendingTick(0);
+      return;
+    }
+    setSendingStartedAt(Date.now());
+    setSendingTick(0);
+    const id = window.setInterval(() => {
+      setSendingTick((n) => n + 1);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [sending]);
+
+  const sendingElapsedSec = sendingStartedAt
+    ? Math.max(
+        sendingTick,
+        Math.floor((Date.now() - sendingStartedAt) / 1000),
+      )
+    : 0;
+  const sendingStatusText =
+    sendingElapsedSec >= 8
+      ? "서버가 바빠서 다른 경로로 시도 중이에요. 조금만 더 기다려 주세요..."
+      : "생각 중이에요. 보통 몇 초면 답해요...";
 
   const total = expenses.reduce((sum, item) => sum + item.amount, 0);
 
@@ -1326,8 +1385,8 @@ export default function Home() {
 
             {sending && (
               <li className="flex justify-start">
-                <div className="rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 text-[14px] text-[#86868b] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-                  생각 중이에요. 잠시만 기다려 주세요...
+                <div className="w-full max-w-full rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 text-[14px] text-[#86868b] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                  {sendingStatusText}
                 </div>
               </li>
             )}
