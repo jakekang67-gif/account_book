@@ -72,6 +72,8 @@ type ChatMessage = {
   id: string;
   role: ChatRole;
   content: string;
+  /** 저장된 지출과 연결되면 대화 수정 시 함께 갱신 */
+  expenseId?: number | null;
 };
 
 type EditForm = {
@@ -88,6 +90,8 @@ type PendingExpense = {
   description: string;
   category: string;
   subcategory: string;
+  /** 지출을 말한 사용자 메시지 id */
+  sourceMessageId?: string | null;
 };
 
 type PendingPhase = "confirm" | "await_category" | "await_chat_cleanup";
@@ -648,7 +652,7 @@ export default function Home() {
     description: string;
     category: string;
     subcategory: string;
-  }) {
+  }): Promise<Expense | null> {
     const { data, error } = await supabase
       .from("expenses")
       .insert({
@@ -665,12 +669,85 @@ export default function Home() {
 
     if (error) {
       setExpenseError(error.message);
-      return false;
+      return null;
     }
 
-    setExpenses((prev) => [data as Expense, ...prev]);
+    const row = data as Expense;
+    setExpenses((prev) => [row, ...prev]);
     setExpenseError(null);
-    return true;
+    return row;
+  }
+
+  async function updateExpenseRecord(
+    id: number,
+    expense: {
+      date: string;
+      amount: number;
+      description: string;
+      category: string;
+      subcategory: string;
+    },
+  ): Promise<Expense | null> {
+    const { data, error } = await supabase
+      .from("expenses")
+      .update({
+        date: expense.date,
+        amount: expense.amount,
+        description: expense.description,
+        category: expense.category,
+        subcategory: expense.subcategory,
+      })
+      .eq("id", id)
+      .select(
+        "id, created_at, date, amount, description, category, subcategory",
+      )
+      .single();
+
+    if (error) {
+      setExpenseError(error.message);
+      return null;
+    }
+
+    const row = data as Expense;
+    setExpenses((prev) =>
+      prev.map((item) => (item.id === id ? row : item)),
+    );
+    setExpenseError(null);
+    return row;
+  }
+
+  function findExpenseIdNearMessage(messageId: string): number | null {
+    const idx = messages.findIndex((m) => m.id === messageId);
+    if (idx < 0) return null;
+    const self = messages[idx];
+    if (self.expenseId) return self.expenseId;
+    for (let i = idx - 1; i >= 0 && i >= idx - 6; i--) {
+      if (messages[i].expenseId) return messages[i].expenseId ?? null;
+    }
+    for (let i = idx + 1; i < messages.length && i <= idx + 6; i++) {
+      if (messages[i].expenseId) return messages[i].expenseId ?? null;
+    }
+    return null;
+  }
+
+  function matchExpenseFromParsed(parsed: PendingExpense): Expense | null {
+    const candidates = expenses.filter(
+      (e) =>
+        e.date === parsed.date &&
+        e.amount === parsed.amount &&
+        e.description === parsed.description,
+    );
+    if (candidates.length === 1) return candidates[0];
+    if (candidates.length > 1) {
+      return [...candidates].sort((a, b) =>
+        b.created_at.localeCompare(a.created_at),
+      )[0];
+    }
+    const loose = expenses.filter(
+      (e) => e.amount === parsed.amount && e.description === parsed.description,
+    );
+    if (loose.length === 1) return loose[0];
+    return null;
   }
 
   function toggleSelect(id: number) {
@@ -941,20 +1018,156 @@ export default function Home() {
     setEditDraft("");
   }
 
-  function saveEditChat() {
+  async function saveEditChat() {
     if (!editingMessageId) return;
     const next = editDraft.trim();
     if (!next) {
       window.alert("내용을 입력해 주세요.");
       return;
     }
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === editingMessageId ? { ...m, content: next } : m,
-      ),
-    );
-    setEditingMessageId(null);
-    setEditDraft("");
+
+    const target = messages.find((m) => m.id === editingMessageId);
+    if (!target) return;
+
+    const previousContent = target.content;
+    setSending(true);
+    sendingRef.current = true;
+    setChatError(null);
+
+    try {
+      // 새 문구로 지출 재추출
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: next,
+          history: [],
+          categoryTree,
+          mode: "extract",
+        }),
+      });
+      const data = (await response.json()) as {
+        reply?: string;
+        expense?: PendingExpense | null;
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(
+          data.error ?? "수정 내용을 파악하지 못했어요. 잠시 후 다시 시도해 주세요.",
+        );
+      }
+
+      let expenseId =
+        target.expenseId ?? findExpenseIdNearMessage(editingMessageId);
+
+      // 연결 id가 없으면, 수정 전 문구로 기존 지출을 찾아 봄
+      if (!expenseId && previousContent.trim()) {
+        const oldRes = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: previousContent,
+            history: [],
+            categoryTree,
+            mode: "extract",
+          }),
+        });
+        const oldData = (await oldRes.json()) as {
+          expense?: PendingExpense | null;
+        };
+        if (oldRes.ok && oldData.expense) {
+          const matched = matchExpenseFromParsed(oldData.expense);
+          if (matched) expenseId = matched.id;
+        }
+      }
+
+      if (!data.expense) {
+        // 지출로 해석되지 않으면 대화만 수정
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === editingMessageId ? { ...m, content: next } : m,
+          ),
+        );
+        window.alert(
+          "대화 문구는 저장했어요. 지출로 인식되지 않아 내역은 바꾸지 않았습니다.",
+        );
+        setEditingMessageId(null);
+        setEditDraft("");
+        return;
+      }
+
+      const parsed: PendingExpense = {
+        date: data.expense.date,
+        amount: data.expense.amount,
+        description: data.expense.description,
+        category: data.expense.category,
+        subcategory: data.expense.subcategory,
+      };
+
+      let saved: Expense | null = null;
+      if (expenseId) {
+        saved = await updateExpenseRecord(expenseId, parsed);
+        if (!saved) {
+          throw new Error("지출 내역 수정에 실패했어요.");
+        }
+      } else {
+        // 연결을 못 찾으면 새 지출로 저장할지 확인
+        const ok = window.confirm(
+          "이 대화에 연결된 지출을 찾지 못했어요.\n새 지출로 저장할까요?",
+        );
+        if (!ok) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === editingMessageId ? { ...m, content: next } : m,
+            ),
+          );
+          setEditingMessageId(null);
+          setEditDraft("");
+          return;
+        }
+        saved = await saveExpense(parsed);
+        if (!saved) {
+          throw new Error("지출 저장에 실패했어요.");
+        }
+      }
+
+      const linkedId = saved.id;
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id === editingMessageId) {
+            return { ...m, content: next, expenseId: linkedId };
+          }
+          // 같은 지출에 묶인 저장 완료 안내 문구는 새 내용으로 맞춤
+          if (
+            m.expenseId === linkedId &&
+            m.role === "assistant" &&
+            m.content.includes("저장했어요")
+          ) {
+            return {
+              ...m,
+              content: formatSavedReply(parsed),
+              expenseId: linkedId,
+            };
+          }
+          if (m.expenseId === linkedId) {
+            return { ...m, expenseId: linkedId };
+          }
+          return m;
+        }),
+      );
+      setEditingMessageId(null);
+      setEditDraft("");
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : "수정에 실패했어요. 잠시 후 다시 시도해 주세요.";
+      setChatError(message);
+      window.alert(message);
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
+    }
   }
 
   // 길게 누르기 메뉴: 다른 곳 탭하면 닫기 (수정 중이면 유지)
@@ -981,9 +1194,25 @@ export default function Home() {
       );
       return;
     }
+    const sourceId = expense.sourceMessageId ?? null;
     setPendingExpense(null);
     setPendingPhase(null);
-    pushAssistant(formatSavedReply(expense));
+    setMessages((prev) => {
+      const linked = sourceId
+        ? prev.map((m) =>
+            m.id === sourceId ? { ...m, expenseId: saved.id } : m,
+          )
+        : prev;
+      return [
+        ...linked,
+        {
+          id: createMessageId(),
+          role: "assistant",
+          content: formatSavedReply(expense),
+          expenseId: saved.id,
+        },
+      ];
+    });
   }
 
   async function handleSend(event?: FormEvent, overrideText?: string) {
@@ -1023,6 +1252,9 @@ export default function Home() {
         return [...prev, userMessage];
       });
     }
+    // 지출을 말한 말풍선 — 저장 후 expenseId 연결용
+    const sourceMessageId =
+      skipAppend && lastMsg?.role === "user" ? lastMsg.id : userMessage.id;
     setInput("");
     setSending(true);
     sendingRef.current = true;
@@ -1101,6 +1333,8 @@ export default function Home() {
             ...pendingExpense,
             category: localPair.category,
             subcategory: localPair.subcategory,
+            sourceMessageId:
+              pendingExpense.sourceMessageId ?? sourceMessageId,
           };
           setPendingExpense(next);
           setPendingPhase("confirm");
@@ -1143,6 +1377,8 @@ export default function Home() {
             description: data.expense.description,
             category: data.expense.category,
             subcategory: data.expense.subcategory,
+            sourceMessageId:
+              pendingExpense.sourceMessageId ?? sourceMessageId,
           };
           setPendingExpense(next);
           setPendingPhase("confirm");
@@ -1249,6 +1485,7 @@ export default function Home() {
           description: data.expense.description,
           category: data.expense.category,
           subcategory: data.expense.subcategory,
+          sourceMessageId,
         };
         setPendingExpense(next);
         setPendingPhase("confirm");
@@ -1677,10 +1914,11 @@ export default function Home() {
                         </button>
                         <button
                           type="button"
-                          onClick={saveEditChat}
-                          className="rounded-full bg-[#1d1d1f] px-3.5 py-1.5 text-[13px] font-medium text-white"
+                          disabled={sending}
+                          onClick={() => void saveEditChat()}
+                          className="rounded-full bg-[#1d1d1f] px-3.5 py-1.5 text-[13px] font-medium text-white disabled:opacity-40"
                         >
-                          저장
+                          {sending ? "저장 중..." : "저장"}
                         </button>
                       </div>
                     </div>

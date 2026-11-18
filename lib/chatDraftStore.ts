@@ -4,6 +4,8 @@ export type ChatDraftMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** 저장된 지출과 연결된 경우 */
+  expenseId?: number | null;
 };
 
 export type ChatDraftPendingExpense = {
@@ -12,6 +14,7 @@ export type ChatDraftPendingExpense = {
   description: string;
   category: string;
   subcategory: string;
+  sourceMessageId?: string | null;
 };
 
 export type ChatDraft = {
