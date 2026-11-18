@@ -1820,7 +1820,7 @@ export default function Home() {
               아직 저장된 내역이 없습니다.
             </p>
           ) : (
-            <ul className="flex max-h-28 flex-col gap-1.5 overflow-y-auto pr-0.5 sm:max-h-40">
+            <ul className="flex max-h-[9.75rem] flex-col gap-1.5 overflow-y-auto pr-0.5 sm:max-h-48">
               {expenses.map((item) => {
                 const categoryLabel = formatCategoryLabel(item);
                 const isEditing = editingId === item.id && editForm;
