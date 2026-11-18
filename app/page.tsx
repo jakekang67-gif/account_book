@@ -326,6 +326,7 @@ export default function Home() {
   const [contextMessageId, setContextMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
   const [budgetListOpen, setBudgetListOpen] = useState(false);
@@ -1015,6 +1016,33 @@ export default function Home() {
     setContextMessageId(null);
     setEditingMessageId(id);
     setEditDraft(content);
+  }
+
+  async function copyChatMessage(id: string, content: string) {
+    const text = content.trim();
+    if (!text) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopiedMessageId(id);
+      window.setTimeout(() => {
+        setCopiedMessageId((prev) => (prev === id ? null : prev));
+        setContextMessageId((prev) => (prev === id ? null : prev));
+      }, 900);
+    } catch {
+      window.alert("복사에 실패했어요. 다시 시도해 주세요.");
+    }
   }
 
   function cancelEditChat() {
@@ -1963,7 +1991,16 @@ export default function Home() {
                     </div>
                   )}
                   {showActions && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void copyChatMessage(message.id, message.content)
+                        }
+                        className="rounded-full bg-[#5856d6] px-3.5 py-1.5 text-[13px] font-medium text-white shadow-[0_2px_8px_rgba(0,0,0,0.12)]"
+                      >
+                        {copiedMessageId === message.id ? "복사됨" : "복사"}
+                      </button>
                       <button
                         type="button"
                         onClick={() =>
