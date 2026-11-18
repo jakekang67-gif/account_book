@@ -1820,7 +1820,7 @@ export default function Home() {
               아직 저장된 내역이 없습니다.
             </p>
           ) : (
-            <ul className="flex max-h-[9.75rem] flex-col gap-1.5 overflow-y-auto pr-0.5 sm:max-h-48">
+            <ul className="flex max-h-[12.5rem] flex-col gap-1.5 overflow-y-auto pr-0.5 sm:max-h-56">
               {expenses.map((item) => {
                 const categoryLabel = formatCategoryLabel(item);
                 const isEditing = editingId === item.id && editForm;
@@ -1830,7 +1830,7 @@ export default function Home() {
                 return (
                   <li
                     key={item.id}
-                    className={`rounded-2xl bg-white px-3 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${
+                    className={`rounded-2xl bg-white px-3 py-1 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${
                       isSelected && !isEditing ? "ring-1 ring-black/10" : ""
                     }`}
                   >
@@ -1935,17 +1935,17 @@ export default function Home() {
                         }}
                         className="flex cursor-pointer items-center justify-between gap-3"
                       >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[15px] font-medium text-[#1d1d1f]">
+                        <div className="min-w-0 flex-1 leading-tight">
+                          <p className="truncate text-[15px] font-medium leading-tight text-[#1d1d1f]">
                             {item.description}
                           </p>
-                          <p className="mt-0.5 text-[12px] text-[#86868b]">
+                          <p className="mt-0 text-[12px] leading-tight text-[#86868b]">
                             {item.date}
                             {categoryLabel ? ` · ${categoryLabel}` : ""}
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          <p className="font-mono text-[15px] font-medium tabular-nums text-[#1d1d1f]">
+                          <p className="font-mono text-[15px] font-medium leading-tight tabular-nums text-[#1d1d1f]">
                             {formatAmount(item.amount)}
                             <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
                               원
