@@ -2024,12 +2024,14 @@ export default function Home() {
                 !chatSelectMode && editingMessageId === message.id;
               const bubbleClass = `whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-left text-[15px] leading-relaxed transition-shadow select-none ${
                 message.id === "welcome"
-                  ? "w-full max-w-full transition-opacity duration-500"
+                  ? "w-full max-w-full border border-black/5 bg-[#fff8e8] text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-opacity duration-500"
                   : "max-w-[85%]"
               } ${
-                message.role === "user"
-                  ? "rounded-br-md bg-[#FEE500] text-[#191919]"
-                  : "rounded-bl-md bg-white text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                message.id === "welcome"
+                  ? ""
+                  : message.role === "user"
+                    ? "rounded-br-md bg-[#FEE500] text-[#191919]"
+                    : "rounded-bl-md bg-white text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
               } ${selectable ? "cursor-pointer" : ""} ${
                 selected || showActions || isEditing
                   ? "ring-2 ring-[#1d1d1f] ring-offset-2 ring-offset-[#f5f5f7]"
@@ -2120,7 +2122,20 @@ export default function Home() {
                       }}
                       className={bubbleClass}
                     >
-                      {message.content}
+                      {message.id === "welcome" && (
+                        <span className="mb-1.5 block text-[13px] font-semibold text-[#1d1d1f]">
+                          안내
+                        </span>
+                      )}
+                      <span
+                        className={
+                          message.id === "welcome"
+                            ? "text-[12px] leading-relaxed text-[#6e6e73]"
+                            : undefined
+                        }
+                      >
+                        {message.content}
+                      </span>
                     </div>
                   )}
                   {showActions && (
