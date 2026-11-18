@@ -2022,7 +2022,7 @@ export default function Home() {
                 message.id !== "welcome";
               const isEditing =
                 !chatSelectMode && editingMessageId === message.id;
-              const bubbleClass = `whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-left text-[15px] leading-relaxed transition-shadow select-none ${
+              const bubbleClass = `whitespace-pre-wrap break-words rounded-2xl px-3.5 py-1.5 text-left text-[15px] leading-relaxed transition-shadow select-none ${
                 message.id === "welcome"
                   ? "w-full max-w-full border border-black/5 bg-[#fff8e8] text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-opacity duration-500"
                   : "max-w-[85%]"
@@ -2168,7 +2168,7 @@ export default function Home() {
 
             {sending && !chatSelectMode && (
               <li className="flex justify-start">
-                <div className="w-full max-w-full rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 text-[14px] text-[#86868b] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                <div className="w-full max-w-full rounded-2xl rounded-bl-md bg-white px-3.5 py-1.5 text-[14px] text-[#86868b] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
                   {sendingStatusText}
                 </div>
               </li>
