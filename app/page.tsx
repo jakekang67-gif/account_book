@@ -265,15 +265,25 @@ export default function Home() {
     [categoryTotals],
   );
 
-  const currentMonth = useMemo(() => koreaToday().slice(0, 7), []);
+  // 빌드 사전 렌더에서 new Date()를 쓰지 않도록, 마운트 후에만 오늘/이번 달 설정
+  const [currentMonth, setCurrentMonth] = useState("");
+  const [todayMax, setTodayMax] = useState("");
 
   const thisMonthSpent = useMemo(
     () =>
-      expenses
-        .filter((item) => monthKeyFromDate(item.date) === currentMonth)
-        .reduce((sum, item) => sum + item.amount, 0),
+      currentMonth
+        ? expenses
+            .filter((item) => monthKeyFromDate(item.date) === currentMonth)
+            .reduce((sum, item) => sum + item.amount, 0)
+        : 0,
     [expenses, currentMonth],
   );
+
+  useEffect(() => {
+    const today = koreaToday();
+    setTodayMax(today);
+    setCurrentMonth(today.slice(0, 7));
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -288,8 +298,12 @@ export default function Home() {
     }
     void loadExpenses();
     void refreshCategories();
-    void refreshBudget();
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user || !currentMonth) return;
+    void refreshBudget();
+  }, [user?.id, currentMonth]);
 
   useEffect(() => {
     // 환영 안내만 있을 때는 맨 위가 보이도록 (모바일에서 잘림 방지)
@@ -868,12 +882,14 @@ export default function Home() {
 
         {tab === "chat" && (
           <>
-        <BudgetStatus
-          monthLabel={formatMonthLabel(currentMonth)}
-          spent={thisMonthSpent}
-          budget={monthBudget}
-          onEdit={() => setBudgetEditorOpen(true)}
-        />
+        {currentMonth ? (
+          <BudgetStatus
+            monthLabel={formatMonthLabel(currentMonth)}
+            spent={thisMonthSpent}
+            budget={monthBudget}
+            onEdit={() => setBudgetEditorOpen(true)}
+          />
+        ) : null}
 
         {/* 저장된 지출 카드 */}
         <section className="shrink-0 border-b border-black/5 bg-[#f5f5f7] px-4 py-3">
@@ -917,7 +933,7 @@ export default function Home() {
                         <input
                           type="date"
                           value={editForm.date}
-                          max={koreaToday()}
+                          max={todayMax || undefined}
                           onChange={(e) =>
                             setEditForm({ ...editForm, date: e.target.value })
                           }
