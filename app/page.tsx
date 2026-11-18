@@ -7,6 +7,7 @@ import { BudgetEditor } from "@/components/BudgetEditor";
 import { BudgetList } from "@/components/BudgetList";
 import { CategoryEditor } from "@/components/CategoryEditor";
 import { ChatCleanupMenu } from "@/components/ChatCleanupMenu";
+import { ChatNoticeBanner } from "@/components/ChatNoticeBanner";
 import { InstallHelp } from "@/components/InstallHelp";
 import { CategoryPieChart } from "@/components/CategoryPieChart";
 import { LoginForm } from "@/components/LoginForm";
@@ -1836,6 +1837,7 @@ export default function Home() {
           ref={chatScrollRef}
           className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
         >
+          <ChatNoticeBanner active={!chatSelectMode} />
           {chatSelectMode && (
             <p className="mb-3 text-center text-[12px] text-[#86868b]">
               지울 대화를 선택한 뒤 아래 「선택 삭제」를 누르세요. (안내 문구는

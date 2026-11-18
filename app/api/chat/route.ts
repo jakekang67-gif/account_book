@@ -7,6 +7,7 @@ import {
   type CategoryTree,
 } from "@/lib/categories";
 import { koreaDateString } from "@/lib/date";
+import { getGeminiModelCandidates } from "@/lib/geminiModels";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -25,17 +26,6 @@ type GeminiChatResponse = {
   reply: string;
   expense: ExpensePayload | null;
 };
-
-/**
- * 호출 후보 모델 (앞에서부터 시도).
- * 빠른 lite를 앞에 두어 대기 시간을 줄이고, Busy 시 다음 후보로 넘어갑니다.
- */
-const MODEL_CANDIDATES = [
-  "gemini-3.5-flash-lite",
-  "gemini-3.1-flash-lite",
-  "gemini-3.8-flash",
-  "gemini-3.6-flash",
-] as const;
 
 function formatKoreanAskConfirm(expense: ExpensePayload) {
   const [, m, d] = expense.date.split("-");
@@ -201,8 +191,9 @@ async function generateWithFallback(
 ) {
   const genAI = new GoogleGenerativeAI(apiKey);
   let lastError: unknown;
+  const modelCandidates = getGeminiModelCandidates();
 
-  for (const modelName of MODEL_CANDIDATES) {
+  for (const modelName of modelCandidates) {
     const model = genAI.getGenerativeModel({
       model: modelName,
       systemInstruction,
