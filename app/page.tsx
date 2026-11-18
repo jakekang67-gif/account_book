@@ -44,6 +44,7 @@ import {
   isChatCleanupAllChoice,
   isChatCleanupSelectChoice,
 } from "@/lib/chatIntent";
+import { normalizeExpenseDescription } from "@/lib/expenseDescription";
 import { koreaToday } from "@/lib/date";
 import {
   formatMonthLabel,
@@ -638,7 +639,33 @@ export default function Home() {
         setExpenseError(error.message);
         setExpenses([]);
       } else {
-        setExpenses((data as Expense[]) ?? []);
+        const rows = ((data as Expense[]) ?? []).map((row) => {
+          const nextDesc = normalizeExpenseDescription(
+            row.description,
+            row.category,
+            row.subcategory,
+          );
+          return nextDesc === row.description
+            ? row
+            : { ...row, description: nextDesc };
+        });
+        setExpenses(rows);
+
+        // 예: "담배 구매" → "담배" 로 DB도 맞춰 둠
+        const toFix = rows.filter((row, i) => {
+          const raw = (data as Expense[])[i];
+          return raw && raw.description !== row.description;
+        });
+        if (toFix.length > 0) {
+          void Promise.all(
+            toFix.map((row) =>
+              supabase
+                .from("expenses")
+                .update({ description: row.description })
+                .eq("id", row.id),
+            ),
+          );
+        }
       }
     } catch (error) {
       const message =
@@ -659,12 +686,17 @@ export default function Home() {
     category: string;
     subcategory: string;
   }): Promise<Expense | null> {
+    const description = normalizeExpenseDescription(
+      expense.description,
+      expense.category,
+      expense.subcategory,
+    );
     const { data, error } = await supabase
       .from("expenses")
       .insert({
         date: expense.date,
         amount: expense.amount,
-        description: expense.description,
+        description,
         category: expense.category,
         subcategory: expense.subcategory,
       })
@@ -694,12 +726,17 @@ export default function Home() {
       subcategory: string;
     },
   ): Promise<Expense | null> {
+    const description = normalizeExpenseDescription(
+      expense.description,
+      expense.category,
+      expense.subcategory,
+    );
     const { data, error } = await supabase
       .from("expenses")
       .update({
         date: expense.date,
         amount: expense.amount,
-        description: expense.description,
+        description,
         category: expense.category,
         subcategory: expense.subcategory,
       })
@@ -791,7 +828,11 @@ export default function Home() {
     if (!editForm) return;
 
     const amount = Number(editForm.amount.replace(/,/g, ""));
-    const description = editForm.description.trim();
+    const description = normalizeExpenseDescription(
+      editForm.description.trim(),
+      editForm.category,
+      editForm.subcategory,
+    );
     if (
       !editForm.date ||
       !description ||

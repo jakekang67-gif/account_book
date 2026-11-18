@@ -7,6 +7,7 @@ import {
   type CategoryTree,
 } from "@/lib/categories";
 import { koreaDateString } from "@/lib/date";
+import { normalizeExpenseDescription } from "@/lib/expenseDescription";
 import { getGeminiModelCandidates } from "@/lib/geminiModels";
 
 type ChatMessage = {
@@ -177,7 +178,9 @@ ${categoryBlock}
 - 오늘 날짜는 ${koreaDateString(0)} 입니다. "오늘"이면 이 날짜를 사용합니다.
 - "어제"면 ${koreaDateString(-1)} 을 사용합니다.
 - amount는 양의 정수(원). "2만 원" → 20000
-- description은 짧은 명사/구
+- description은 짧은 품목명만 (예: "담배", "점심", "택시")
+- description에 "구매", "구입", "결제", "요금"을 붙이지 마세요. "담배 구매" → "담배"
+- 소분류가 있으면 description은 소분류와 같게 두는 것을 우선합니다 (예: 소분류 담배 → description "담배")
 - 날짜·금액·내용·대분류·소분류가 모두 명확할 때만 expense를 채웁니다.
 - 하나라도 애매하면 expense는 null로 두고, reply로 짧게 되묻습니다.
   예: "택시 요금인가요, 대중교통인가요?" / "금액이 얼마인가요?"
@@ -385,7 +388,11 @@ export async function POST(request: Request) {
         expense = {
           date,
           amount: Math.round(amount),
-          description,
+          description: normalizeExpenseDescription(
+            description,
+            pair.category,
+            pair.subcategory,
+          ),
           category: pair.category,
           subcategory: pair.subcategory,
         };
