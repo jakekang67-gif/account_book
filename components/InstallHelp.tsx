@@ -49,7 +49,7 @@ export function InstallHelp({ open, onClose }: InstallHelpProps) {
                 <span className="font-medium">앱 설치</span> 또는{" "}
                 <span className="font-medium">홈 화면에 추가</span> 선택
               </li>
-              <li>홈화면 「챗가계부」 아이콘으로 실행</li>
+              <li>홈화면 「나의 챗가계부」 아이콘으로 실행</li>
             </ol>
             <p className="mt-2 text-[12px] text-[#86868b]">
               주소창·하단 바 없이 앱처럼 열립니다.
@@ -84,11 +84,11 @@ export function InstallHelp({ open, onClose }: InstallHelpProps) {
                 파일 열어 설치 (삼성폰은 설정 → 보안 및 개인정보 보호 → 보안
                 위험 자동 차단을 잠시 꺼야 할 수 있음)
               </li>
-              <li>홈화면 「챗가계부」로 실행</li>
+              <li>홈화면 「나의 챗가계부」로 실행</li>
             </ol>
             <a
               href="/downloads/AI-chatgaegyebu.apk"
-              download="AI챗가계부.apk"
+              download="나의AI챗가계부.apk"
               className="mt-3 flex w-full items-center justify-center rounded-2xl bg-[#1d1d1f] py-2.5 text-[14px] font-medium text-white"
             >
               APK 다운로드

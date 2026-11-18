@@ -1175,7 +1175,7 @@ export default function Home() {
   const total = expenses.reduce((sum, item) => sum + item.amount, 0);
 
   const tabTitle =
-    tab === "chat" ? "AI 챗가계부" : tab === "monthly" ? "월별 지출" : "카테고리별 지출";
+    tab === "chat" ? "나의 AI 챗가계부" : tab === "monthly" ? "월별 지출" : "카테고리별 지출";
 
   if (authLoading) {
     return (

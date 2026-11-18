@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 /** 홈화면 추가 시 주소창 없는 앱처럼 보이도록 standalone 설정 */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "AI 챗가계부",
-    short_name: "챗가계부",
+    name: "나의 AI 챗가계부",
+    short_name: "나의 챗가계부",
     description: "채팅으로 정리하는 AI 스마트 가계부",
     start_url: "/",
     scope: "/",

@@ -48,7 +48,7 @@ export function LoginForm() {
     <div className="flex min-h-[100dvh] flex-1 flex-col items-center justify-center bg-[#f5f5f7] px-5">
       <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
         <h1 className="text-center text-[20px] font-semibold text-[#1d1d1f]">
-          AI 챗가계부
+          나의 AI 챗가계부
         </h1>
         <p className="mt-2 text-center text-[13px] leading-relaxed text-[#86868b]">
           채팅으로 지출을 정리하는 나만의 AI 가계부입니다.
