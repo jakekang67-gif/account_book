@@ -413,7 +413,7 @@ export default function Home() {
     setShowWelcomeTip(true);
     const timer = window.setTimeout(() => {
       setShowWelcomeTip(false);
-    }, 4000);
+    }, 5000);
     return () => window.clearTimeout(timer);
   }, [user?.id, welcomeTipEpoch]);
 
