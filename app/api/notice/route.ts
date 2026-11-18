@@ -13,7 +13,7 @@ export async function GET() {
   const models = getGeminiModelCandidates();
   const custom = process.env.CHAT_NOTICE?.trim();
   const title =
-    process.env.CHAT_NOTICE_TITLE?.trim() || "안내";
+    process.env.CHAT_NOTICE_TITLE?.trim() || "모델·업데이트 안내";
   const id =
     process.env.CHAT_NOTICE_ID?.trim() ||
     (custom ? `custom:${hashText(custom)}` : `models:${models.join("|")}`);
@@ -26,7 +26,9 @@ export async function GET() {
       "",
       ...models.map((m, i) => `${i + 1}. ${m}`),
       "",
-      "모델·공지 문구는 앱 설정으로 업데이트됩니다. 닫은 뒤에도 새 공지가 오면 다시 표시됩니다.",
+      "• 공지/모델은 Vercel 환경변수로 바꿀 수 있습니다.",
+      "• 닫은 뒤에도 새 공지(ID·문구·모델 변경)가 오면 다시 표시됩니다.",
+      "• 메뉴 → 「안내 다시 보기」로 언제든 다시 열 수 있습니다.",
     ].join("\n");
 
   return NextResponse.json({

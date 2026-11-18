@@ -27,3 +27,12 @@ export function saveDismissedNoticeId(id: string) {
     // ignore
   }
 }
+
+export function clearDismissedNoticeId() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(DISMISS_KEY);
+  } catch {
+    // ignore
+  }
+}

@@ -20,6 +20,7 @@ type AppMenuProps = {
   onOpenBudgetList?: () => void;
   onOpenInstallHelp?: () => void;
   onOpenChatCleanup?: () => void;
+  onOpenChatNotice?: () => void;
   /** 메뉴 열림/닫힘 — 차트 겹침 방지용 */
   onOpenChange?: (open: boolean) => void;
   accountEmail?: string | null;
@@ -32,6 +33,7 @@ export function AppMenu({
   onOpenBudgetList,
   onOpenInstallHelp,
   onOpenChatCleanup,
+  onOpenChatNotice,
   onOpenChange,
   accountEmail,
   onSignOut,
@@ -46,6 +48,7 @@ export function AppMenu({
         onOpenBudgetList={onOpenBudgetList}
         onOpenInstallHelp={onOpenInstallHelp}
         onOpenChatCleanup={onOpenChatCleanup}
+        onOpenChatNotice={onOpenChatNotice}
         onOpenChange={onOpenChange}
         accountEmail={accountEmail}
         onSignOut={onSignOut}
@@ -59,6 +62,7 @@ export function AppMenu({
       onOpenBudgetList={onOpenBudgetList}
       onOpenInstallHelp={onOpenInstallHelp}
       onOpenChatCleanup={onOpenChatCleanup}
+      onOpenChatNotice={onOpenChatNotice}
       onOpenChange={onOpenChange}
       accountEmail={accountEmail}
       onSignOut={onSignOut}
@@ -72,6 +76,7 @@ function MenuWithGoogle({
   onOpenBudgetList,
   onOpenInstallHelp,
   onOpenChatCleanup,
+  onOpenChatNotice,
   onOpenChange,
   accountEmail,
   onSignOut,
@@ -139,6 +144,7 @@ function MenuWithGoogle({
       onOpenBudgetList={onOpenBudgetList}
       onOpenInstallHelp={onOpenInstallHelp}
       onOpenChatCleanup={onOpenChatCleanup}
+      onOpenChatNotice={onOpenChatNotice}
       onOpenChange={onOpenChange}
       accountEmail={accountEmail}
       onSignOut={onSignOut}
@@ -160,6 +166,7 @@ function MenuPanel({
   onOpenBudgetList,
   onOpenInstallHelp,
   onOpenChatCleanup,
+  onOpenChatNotice,
   onOpenChange,
   accountEmail,
   onSignOut,
@@ -329,6 +336,19 @@ function MenuPanel({
                 className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
               >
                 월 예산 목록
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenChatNotice?.();
+                }}
+                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
+              >
+                안내 다시 보기
               </button>
             </li>
             <li>

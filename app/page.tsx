@@ -319,6 +319,7 @@ export default function Home() {
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
   const [chatCleanupOpen, setChatCleanupOpen] = useState(false);
   const [appMenuOpen, setAppMenuOpen] = useState(false);
+  const [chatNoticeShowRequestId, setChatNoticeShowRequestId] = useState(0);
   const [chatSelectMode, setChatSelectMode] = useState(false);
   const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
   /** 길게 눌러 단일 삭제·수정 대상 */
@@ -1620,6 +1621,11 @@ export default function Home() {
               onOpenBudgetList={() => void openBudgetList()}
               onOpenInstallHelp={() => setInstallHelpOpen(true)}
               onOpenChatCleanup={() => setChatCleanupOpen(true)}
+              onOpenChatNotice={() => {
+                setTab("chat");
+                setChatSelectMode(false);
+                setChatNoticeShowRequestId((n) => n + 1);
+              }}
               onOpenChange={setAppMenuOpen}
               accountEmail={user.email}
               onSignOut={() => void signOut()}
@@ -1837,7 +1843,10 @@ export default function Home() {
           ref={chatScrollRef}
           className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
         >
-          <ChatNoticeBanner active={!chatSelectMode} />
+          <ChatNoticeBanner
+            active={!chatSelectMode}
+            showRequestId={chatNoticeShowRequestId}
+          />
           {chatSelectMode && (
             <p className="mb-3 text-center text-[12px] text-[#86868b]">
               지울 대화를 선택한 뒤 아래 「선택 삭제」를 누르세요. (안내 문구는

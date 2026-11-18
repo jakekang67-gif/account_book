@@ -2,52 +2,77 @@
 
 import { useEffect, useState } from "react";
 import {
+  clearDismissedNoticeId,
   loadDismissedNoticeId,
   saveDismissedNoticeId,
   type ChatNoticePayload,
 } from "@/lib/chatNotice";
 
 type ChatNoticeBannerProps = {
-  /** false면 숨김 (예: 채팅 탭이 아닐 때) */
+  /** false면 숨김 (예: 선택 삭제 모드) */
   active?: boolean;
+  /**
+   * 값이 바뀔 때마다 공지를 다시 불러와 강제로 표시합니다.
+   * 메뉴 「안내 다시 보기」에서 증가시킵니다.
+   */
+  showRequestId?: number;
 };
 
-/** 채팅 상단에서 확인하는 앱 공지 */
-export function ChatNoticeBanner({ active = true }: ChatNoticeBannerProps) {
+/** 채팅 상단 — 모델·업데이트 안내 */
+export function ChatNoticeBanner({
+  active = true,
+  showRequestId = 0,
+}: ChatNoticeBannerProps) {
   const [notice, setNotice] = useState<ChatNoticePayload | null>(null);
   const [visible, setVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
 
-    async function load() {
+    async function load(forceShow: boolean) {
+      setLoading(true);
       try {
         const res = await fetch("/api/notice", { cache: "no-store" });
         if (!res.ok) return;
         const data = (await res.json()) as ChatNoticePayload;
         if (cancelled || !data?.id || !data?.message) return;
 
-        const dismissed = loadDismissedNoticeId();
-        if (dismissed === data.id) {
-          setNotice(data);
-          setVisible(false);
+        setNotice(data);
+
+        if (forceShow) {
+          clearDismissedNoticeId();
+          setVisible(true);
           return;
         }
-        setNotice(data);
-        setVisible(true);
+
+        const dismissed = loadDismissedNoticeId();
+        setVisible(dismissed !== data.id);
       } catch {
         // 네트워크 오류 시 공지 생략
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
 
-    void load();
+    void load(showRequestId > 0);
     return () => {
       cancelled = true;
     };
-  }, [active]);
+  }, [active, showRequestId]);
 
-  if (!active || !visible || !notice) return null;
+  if (!active) return null;
+  if (!visible || !notice) {
+    if (loading && showRequestId > 0) {
+      return (
+        <p className="mb-3 text-center text-[12px] text-[#86868b]">
+          안내를 불러오는 중...
+        </p>
+      );
+    }
+    return null;
+  }
 
   return (
     <div className="mb-3 rounded-2xl border border-black/5 bg-[#fff8e8] px-3.5 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
