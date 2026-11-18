@@ -311,6 +311,7 @@ export default function Home() {
   const [categoryEditorOpen, setCategoryEditorOpen] = useState(false);
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
   const [chatCleanupOpen, setChatCleanupOpen] = useState(false);
+  const [appMenuOpen, setAppMenuOpen] = useState(false);
   const [chatSelectMode, setChatSelectMode] = useState(false);
   const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
   const [budgetListOpen, setBudgetListOpen] = useState(false);
@@ -1275,6 +1276,7 @@ export default function Home() {
               onOpenBudgetList={() => void openBudgetList()}
               onOpenInstallHelp={() => setInstallHelpOpen(true)}
               onOpenChatCleanup={() => setChatCleanupOpen(true)}
+              onOpenChange={setAppMenuOpen}
               accountEmail={user.email}
               onSignOut={() => void signOut()}
             />
@@ -1635,7 +1637,7 @@ export default function Home() {
                 <p className="px-1 text-[13px] font-medium text-[#86868b]">
                   월별 총 지출
                 </p>
-                <MonthlyBarChart data={monthlyTotals} />
+                {!appMenuOpen && <MonthlyBarChart data={monthlyTotals} />}
                 <ul className="space-y-2">
                   {monthlyTotals.map((row) => (
                     <li
@@ -1705,7 +1707,9 @@ export default function Home() {
                     <p className="px-1 text-[13px] font-medium text-[#86868b]">
                       카테고리 비율
                     </p>
-                    <CategoryPieChart data={categoryTotals} />
+                    {!appMenuOpen && (
+                      <CategoryPieChart data={categoryTotals} />
+                    )}
                     <ul className="space-y-2">
                       {categoryTotals.map((row) => (
                         <li

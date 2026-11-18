@@ -20,6 +20,8 @@ type AppMenuProps = {
   onOpenBudgetList?: () => void;
   onOpenInstallHelp?: () => void;
   onOpenChatCleanup?: () => void;
+  /** 메뉴 열림/닫힘 — 차트 겹침 방지용 */
+  onOpenChange?: (open: boolean) => void;
   accountEmail?: string | null;
   onSignOut?: () => void;
 };
@@ -30,6 +32,7 @@ export function AppMenu({
   onOpenBudgetList,
   onOpenInstallHelp,
   onOpenChatCleanup,
+  onOpenChange,
   accountEmail,
   onSignOut,
 }: AppMenuProps) {
@@ -43,6 +46,7 @@ export function AppMenu({
         onOpenBudgetList={onOpenBudgetList}
         onOpenInstallHelp={onOpenInstallHelp}
         onOpenChatCleanup={onOpenChatCleanup}
+        onOpenChange={onOpenChange}
         accountEmail={accountEmail}
         onSignOut={onSignOut}
       />
@@ -55,6 +59,7 @@ export function AppMenu({
       onOpenBudgetList={onOpenBudgetList}
       onOpenInstallHelp={onOpenInstallHelp}
       onOpenChatCleanup={onOpenChatCleanup}
+      onOpenChange={onOpenChange}
       accountEmail={accountEmail}
       onSignOut={onSignOut}
     />
@@ -67,6 +72,7 @@ function MenuWithGoogle({
   onOpenBudgetList,
   onOpenInstallHelp,
   onOpenChatCleanup,
+  onOpenChange,
   accountEmail,
   onSignOut,
 }: AppMenuProps) {
@@ -133,6 +139,7 @@ function MenuWithGoogle({
       onOpenBudgetList={onOpenBudgetList}
       onOpenInstallHelp={onOpenInstallHelp}
       onOpenChatCleanup={onOpenChatCleanup}
+      onOpenChange={onOpenChange}
       accountEmail={accountEmail}
       onSignOut={onSignOut}
     />
@@ -153,6 +160,7 @@ function MenuPanel({
   onOpenBudgetList,
   onOpenInstallHelp,
   onOpenChatCleanup,
+  onOpenChange,
   accountEmail,
   onSignOut,
 }: AppMenuProps & {
@@ -178,6 +186,11 @@ function MenuPanel({
   const setBusy = setBusyProp ?? setLocalBusy;
   const setSession = setSessionProp ?? setLocalSession;
 
+  function setMenuOpen(next: boolean) {
+    setOpen(next);
+    onOpenChange?.(next);
+  }
+
   useEffect(() => {
     if (sessionProp === undefined) {
       setLocalSession(loadGoogleSession());
@@ -187,12 +200,14 @@ function MenuPanel({
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
       if (!menuRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+        setMenuOpen(false);
       }
     }
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
-  }, []);
+    // setMenuOpen는 open/onOpenChange에 묶이므로 리스너만 유지
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onOpenChange]);
 
   function handleDownload() {
     if (expenses.length === 0) {
@@ -201,7 +216,7 @@ function MenuPanel({
     }
     downloadExpensesExcel(expenses);
     setStatus("엑셀 파일을 다운로드했습니다.");
-    setOpen(false);
+    setMenuOpen(false);
   }
 
   async function handleSendMail() {
@@ -233,7 +248,7 @@ function MenuPanel({
         throw new Error(data.error ?? "메일 발송에 실패했습니다.");
       }
       setStatus(`${session.email}로 메일을 보냈습니다.`);
-      setOpen(false);
+      setMenuOpen(false);
     } catch (error) {
       setStatus(
         error instanceof Error ? error.message : "메일 발송에 실패했습니다.",
@@ -260,18 +275,18 @@ function MenuPanel({
   }
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div className="relative z-[110]" ref={menuRef}>
       <button
         type="button"
         aria-label="메뉴"
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={() => setMenuOpen(!open)}
         className="flex h-9 w-9 items-center justify-center rounded-xl text-[#1d1d1f] hover:bg-[#f5f5f7]"
       >
         <span className="text-[20px] leading-none">☰</span>
       </button>
 
       {open && (
-        <div className="absolute right-0 top-11 z-50 w-64 overflow-hidden rounded-2xl border border-black/5 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+        <div className="absolute right-0 top-11 z-[120] w-64 overflow-hidden rounded-2xl border border-black/5 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
           <div className="border-b border-black/5 px-3 py-2.5">
             <p className="text-[12px] text-[#86868b]">
               {accountEmail
@@ -308,7 +323,7 @@ function MenuPanel({
                 type="button"
                 disabled={busy}
                 onClick={() => {
-                  setOpen(false);
+                  setMenuOpen(false);
                   onOpenBudgetList?.();
                 }}
                 className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
@@ -321,7 +336,7 @@ function MenuPanel({
                 type="button"
                 disabled={busy}
                 onClick={() => {
-                  setOpen(false);
+                  setMenuOpen(false);
                   onOpenChatCleanup?.();
                 }}
                 className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
@@ -334,7 +349,7 @@ function MenuPanel({
                 type="button"
                 disabled={busy}
                 onClick={() => {
-                  setOpen(false);
+                  setMenuOpen(false);
                   onOpenInstallHelp?.();
                 }}
                 className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
@@ -347,7 +362,7 @@ function MenuPanel({
                 type="button"
                 disabled={busy}
                 onClick={() => {
-                  setOpen(false);
+                  setMenuOpen(false);
                   onOpenCategoryEditor?.();
                 }}
                 className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
@@ -382,7 +397,7 @@ function MenuPanel({
                   type="button"
                   disabled={busy}
                   onClick={() => {
-                    setOpen(false);
+                    setMenuOpen(false);
                     onSignOut();
                   }}
                   className="w-full px-3 py-2.5 text-left text-[14px] text-[#b42318] hover:bg-[#f5f5f7] disabled:opacity-40"
