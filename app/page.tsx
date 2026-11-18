@@ -1798,8 +1798,8 @@ export default function Home() {
         {tab === "chat" && (
           <>
         {/* 저장된 지출 카드 */}
-        <section className="shrink-0 border-b border-black/5 bg-[#f5f5f7] px-4 py-3">
-          <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
+        <section className="shrink-0 border-b border-black/5 bg-[#f5f5f7] px-3 py-2">
+          <div className="mb-1.5 flex items-baseline justify-between gap-3 px-0.5">
             <p className="text-[13px] font-medium text-[#86868b]">지출 내역</p>
             <p className="font-mono text-[13px] tabular-nums text-[#1d1d1f]">
               합계 {formatAmount(total)}
@@ -1808,19 +1808,19 @@ export default function Home() {
           </div>
 
           {expenseError && (
-            <p className="mb-2 px-1 text-[13px] text-red-600">{expenseError}</p>
+            <p className="mb-1.5 px-0.5 text-[13px] text-red-600">{expenseError}</p>
           )}
 
           {loadingExpenses ? (
-            <p className="rounded-2xl bg-white px-4 py-5 text-center text-[14px] text-[#86868b]">
+            <p className="rounded-2xl bg-white px-3 py-3 text-center text-[14px] text-[#86868b]">
               불러오는 중...
             </p>
           ) : expenses.length === 0 ? (
-            <p className="rounded-2xl bg-white px-4 py-5 text-center text-[14px] text-[#86868b]">
+            <p className="rounded-2xl bg-white px-3 py-3 text-center text-[14px] text-[#86868b]">
               아직 저장된 내역이 없습니다.
             </p>
           ) : (
-            <ul className="flex max-h-28 flex-col gap-2 overflow-y-auto pr-1 sm:max-h-40">
+            <ul className="flex max-h-28 flex-col gap-1.5 overflow-y-auto pr-0.5 sm:max-h-40">
               {expenses.map((item) => {
                 const categoryLabel = formatCategoryLabel(item);
                 const isEditing = editingId === item.id && editForm;
@@ -1830,7 +1830,7 @@ export default function Home() {
                 return (
                   <li
                     key={item.id}
-                    className={`rounded-2xl bg-white px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${
+                    className={`rounded-2xl bg-white px-3 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${
                       isSelected && !isEditing ? "ring-1 ring-black/10" : ""
                     }`}
                   >
