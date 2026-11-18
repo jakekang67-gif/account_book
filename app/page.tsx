@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AppMenu } from "@/components/AppMenu";
 import { useAuth } from "@/components/AuthProvider";
+import { AndroidInstallHelp } from "@/components/AndroidInstallHelp";
 import { BudgetEditor } from "@/components/BudgetEditor";
 import { BudgetList } from "@/components/BudgetList";
 import { CategoryEditor } from "@/components/CategoryEditor";
@@ -234,6 +235,7 @@ export default function Home() {
     useState<CategoryTree>(DEFAULT_CATEGORY_TREE);
   const [categoryRows, setCategoryRows] = useState<CategoryItemRow[]>([]);
   const [categoryEditorOpen, setCategoryEditorOpen] = useState(false);
+  const [androidInstallOpen, setAndroidInstallOpen] = useState(false);
   const [budgetListOpen, setBudgetListOpen] = useState(false);
   const [budgetEditorOpen, setBudgetEditorOpen] = useState(false);
   const [editingBudgetMonth, setEditingBudgetMonth] = useState("");
@@ -932,6 +934,7 @@ export default function Home() {
               expenses={expenses}
               onOpenCategoryEditor={() => setCategoryEditorOpen(true)}
               onOpenBudgetList={() => void openBudgetList()}
+              onOpenAndroidInstall={() => setAndroidInstallOpen(true)}
               accountEmail={user.email}
               onSignOut={() => void signOut()}
             />
@@ -1370,6 +1373,11 @@ export default function Home() {
         tree={categoryTree}
         onClose={() => setCategoryEditorOpen(false)}
         onChanged={refreshCategories}
+      />
+
+      <AndroidInstallHelp
+        open={androidInstallOpen}
+        onClose={() => setAndroidInstallOpen(false)}
       />
 
       <BudgetList

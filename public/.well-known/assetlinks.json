@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.baroeco.chatgaegyebu",
+      "sha256_cert_fingerprints": [
+        "02:20:7D:66:C0:E3:2B:AA:A3:F8:9F:43:C5:80:6B:A0:5D:19:FC:D2:1C:D3:68:53:F0:C3:9C:B3:65:9F:4D:65"
+      ]
+    }
+  }
+]

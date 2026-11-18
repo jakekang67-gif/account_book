@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/components/AuthProvider";
 import { GoogleProvider } from "@/components/GoogleProvider";
+import { PwaRegister } from "@/components/PwaRegister";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -51,7 +52,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex h-dvh min-h-0 flex-col overflow-hidden font-sans">
         <GoogleProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <PwaRegister />
+            {children}
+          </AuthProvider>
         </GoogleProvider>
       </body>
     </html>
