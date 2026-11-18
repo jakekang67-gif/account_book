@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { InstallHelp } from "@/components/InstallHelp";
 import { getRememberLogin, getSavedEmail } from "@/lib/authStorage";
 
 type Mode = "login" | "signup";
@@ -15,6 +16,7 @@ export function LoginForm() {
   const [rememberMe, setRememberMe] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [installHelpOpen, setInstallHelpOpen] = useState(false);
 
   useEffect(() => {
     setEmail(getSavedEmail());
@@ -51,6 +53,13 @@ export function LoginForm() {
         <p className="mt-2 text-center text-[13px] leading-relaxed text-[#86868b]">
           채팅으로 지출을 정리하는 나만의 AI 가계부입니다.
         </p>
+        <button
+          type="button"
+          onClick={() => setInstallHelpOpen(true)}
+          className="mt-3 w-full text-center text-[12px] font-medium text-[#1d1d1f] underline underline-offset-2"
+        >
+          홈화면에 앱처럼 추가하는 방법
+        </button>
 
         <div className="mt-5 grid grid-cols-2 gap-1 rounded-2xl bg-[#f5f5f7] p-1">
           {(
@@ -141,6 +150,11 @@ export function LoginForm() {
           </button>
         </form>
       </div>
+
+      <InstallHelp
+        open={installHelpOpen}
+        onClose={() => setInstallHelpOpen(false)}
+      />
     </div>
   );
 }

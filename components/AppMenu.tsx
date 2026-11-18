@@ -18,7 +18,7 @@ type AppMenuProps = {
   expenses: ExcelExpenseRow[];
   onOpenCategoryEditor?: () => void;
   onOpenBudgetList?: () => void;
-  onOpenAndroidInstall?: () => void;
+  onOpenInstallHelp?: () => void;
   accountEmail?: string | null;
   onSignOut?: () => void;
 };
@@ -27,7 +27,7 @@ export function AppMenu({
   expenses,
   onOpenCategoryEditor,
   onOpenBudgetList,
-  onOpenAndroidInstall,
+  onOpenInstallHelp,
   accountEmail,
   onSignOut,
 }: AppMenuProps) {
@@ -39,7 +39,7 @@ export function AppMenu({
         googleEnabled={false}
         onOpenCategoryEditor={onOpenCategoryEditor}
         onOpenBudgetList={onOpenBudgetList}
-        onOpenAndroidInstall={onOpenAndroidInstall}
+        onOpenInstallHelp={onOpenInstallHelp}
         accountEmail={accountEmail}
         onSignOut={onSignOut}
       />
@@ -50,7 +50,7 @@ export function AppMenu({
       expenses={expenses}
       onOpenCategoryEditor={onOpenCategoryEditor}
       onOpenBudgetList={onOpenBudgetList}
-      onOpenAndroidInstall={onOpenAndroidInstall}
+      onOpenInstallHelp={onOpenInstallHelp}
       accountEmail={accountEmail}
       onSignOut={onSignOut}
     />
@@ -61,7 +61,7 @@ function MenuWithGoogle({
   expenses,
   onOpenCategoryEditor,
   onOpenBudgetList,
-  onOpenAndroidInstall,
+  onOpenInstallHelp,
   accountEmail,
   onSignOut,
 }: AppMenuProps) {
@@ -126,7 +126,7 @@ function MenuWithGoogle({
       onConnectGoogle={() => login()}
       onOpenCategoryEditor={onOpenCategoryEditor}
       onOpenBudgetList={onOpenBudgetList}
-      onOpenAndroidInstall={onOpenAndroidInstall}
+      onOpenInstallHelp={onOpenInstallHelp}
       accountEmail={accountEmail}
       onSignOut={onSignOut}
     />
@@ -145,7 +145,7 @@ function MenuPanel({
   onConnectGoogle,
   onOpenCategoryEditor,
   onOpenBudgetList,
-  onOpenAndroidInstall,
+  onOpenInstallHelp,
   accountEmail,
   onSignOut,
 }: AppMenuProps & {
@@ -315,11 +315,11 @@ function MenuPanel({
                 disabled={busy}
                 onClick={() => {
                   setOpen(false);
-                  onOpenAndroidInstall?.();
+                  onOpenInstallHelp?.();
                 }}
                 className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
               >
-                안드로이드 앱 설치
+                홈화면에 추가 안내
               </button>
             </li>
             <li>
