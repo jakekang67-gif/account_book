@@ -212,7 +212,7 @@ const WELCOME_MESSAGE: ChatMessage = {
   id: "welcome",
   role: "assistant",
   content:
-    "지출을 말해 주세요!\n예를들면 “오늘 점심 12,000원”처럼 짧게!\n저장 전 분류를 확인받고, 통계도 물어보실 수 있어요.",
+    "안녕하세요. 지출을 말씀해 주세요!\n예를들면 “오늘 점심 12,000원”처럼 짧게!\n저장 전 분류를 확인받고, 통계도 물어보실 수 있어요.",
 };
 
 export default function Home() {
@@ -342,7 +342,11 @@ export default function Home() {
     chatDraftReadyRef.current = false;
     const draft = loadChatDraft(previousUserId);
     if (draft && draft.messages.length > 0) {
-      setMessages(draft.messages as ChatMessage[]);
+      // 환영 문구는 최신 문구로 맞춤
+      const restored = (draft.messages as ChatMessage[]).map((m) =>
+        m.id === "welcome" ? { ...m, content: WELCOME_MESSAGE.content } : m,
+      );
+      setMessages(restored);
       setPendingExpense(draft.pendingExpense);
       setPendingPhase(draft.pendingPhase);
       setInput(draft.input || "");
@@ -1171,7 +1175,11 @@ export default function Home() {
                 }`}
               >
                 <div
-                  className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-[15px] leading-relaxed ${
+                  className={`whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-[15px] leading-relaxed ${
+                    message.id === "welcome"
+                      ? "w-full max-w-full"
+                      : "max-w-[85%]"
+                  } ${
                     message.role === "user"
                       ? "rounded-br-md bg-[#FEE500] text-[#191919]"
                       : "rounded-bl-md bg-white text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
