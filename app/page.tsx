@@ -56,9 +56,7 @@ import {
   summarizeByMonth,
 } from "@/lib/reports";
 import {
-  loadLastTab,
   markWelcomeShownThisSession,
-  saveLastTab,
   wasWelcomeShownThisSession,
 } from "@/lib/uiPrefs";
 import { supabase } from "@/lib/supabase";
@@ -323,7 +321,6 @@ export default function Home() {
   /** 앱을 나가며 요청이 끊긴 경우, 초안의 wasSending을 유지 */
   const preserveSendingDraftRef = useRef(false);
   const [tab, setTab] = useState<AppTab>("chat");
-  const [tabReady, setTabReady] = useState(false);
   const [reportMonth, setReportMonth] = useState("");
   const [categoryTree, setCategoryTree] =
     useState<CategoryTree>(DEFAULT_CATEGORY_TREE);
@@ -418,18 +415,6 @@ export default function Home() {
     setBudgetAlertPercent(loadBudgetAlertPercent());
   }, []);
 
-  // 최근 탭 복원
-  useEffect(() => {
-    const last = loadLastTab();
-    if (last) setTab(last);
-    setTabReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!tabReady) return;
-    saveLastTab(tab);
-  }, [tab, tabReady]);
-
   // 환영 안내: 이 세션에서 아직 안 보여줬을 때만 (다른 앱 갔다 와도 재표시 안 함)
   useEffect(() => {
     if (!user?.id) return;
@@ -441,7 +426,7 @@ export default function Home() {
     markWelcomeShownThisSession();
     const timer = window.setTimeout(() => {
       setShowWelcomeTip(false);
-    }, 5000);
+    }, 10000);
     return () => window.clearTimeout(timer);
   }, [user?.id]);
 
@@ -477,6 +462,8 @@ export default function Home() {
     function onVisible() {
       if (document.visibilityState === "visible") {
         pageLeavingRef.current = false;
+        // 앱을 나갔다 들어오면 항상 채팅 탭
+        setTab("chat");
       } else {
         flushLeavingDraft();
       }
@@ -1865,10 +1852,10 @@ export default function Home() {
         {/* 환영 안내: 대화창 위 (터치 또는 5초 후 사라짐) */}
         {showWelcomeTip && !chatSelectMode && (
           <div
-            className="shrink-0 border-b border-black/5 bg-[#fff8e8] px-3.5 py-2"
+            className="shrink-0 border-b border-[#e8c96a]/bg-[#ffd66e] px-3.5 py-2.5"
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <p className="whitespace-pre-wrap text-[13px] leading-[20px] text-[#6e6e73]">
+            <p className="whitespace-pre-wrap text-[15px] leading-[22px] text-[#3d3d41]">
               {WELCOME_MESSAGE.content}
             </p>
           </div>
