@@ -7,6 +7,8 @@ export type CategoryTree = Record<string, string[]>;
 
 export const DEFAULT_CATEGORY_TREE: CategoryTree = {
   수입: ["급여", "기타"],
+  투자: ["주식", "증권", "적금", "기타"],
+  대출: ["주택", "재테크", "기타"],
   식대: ["아침", "점심", "저녁", "야식", "회식", "기타식대"],
   차량유지: [
     "주유",

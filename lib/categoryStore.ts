@@ -46,8 +46,8 @@ export async function loadCategoryTree(): Promise<{
     return loadCategoryTree();
   }
 
-  // 기존 계정에도 수입(급여·기타)이 없으면 보강
-  const ensured = await ensureIncomeCategories(rows);
+  // 기존 계정에도 필수 대·소분류가 없으면 보강
+  const ensured = await ensureRequiredCategories(rows);
   if (ensured.added) {
     return loadCategoryTree();
   }
@@ -59,19 +59,30 @@ export async function loadCategoryTree(): Promise<{
   };
 }
 
-/** 대분류 수입 + 소분류 급여·기타 보장 */
-async function ensureIncomeCategories(rows: CategoryItemRow[]) {
-  const incomeSubs = new Set(
-    rows.filter((r) => r.category === "수입").map((r) => r.subcategory),
-  );
-  const missing = (["급여", "기타"] as const).filter(
-    (sub) => !incomeSubs.has(sub),
-  );
-  if (missing.length === 0) return { added: false, error: null as string | null };
+/** 나중에 추가된 대·소분류를 기존 DB에도 맞춤 */
+const REQUIRED_CATEGORY_SUBS: Record<string, string[]> = {
+  수입: ["급여", "기타"],
+  투자: ["주식", "증권", "적금", "기타"],
+  대출: ["주택", "재테크", "기타"],
+};
 
-  const { error } = await supabase.from("category_items").insert(
-    missing.map((subcategory) => ({ category: "수입", subcategory })),
+async function ensureRequiredCategories(rows: CategoryItemRow[]) {
+  const existing = new Set(
+    rows.map((r) => `${r.category}\0${r.subcategory}`),
   );
+  const missing: Array<{ category: string; subcategory: string }> = [];
+  for (const [category, subs] of Object.entries(REQUIRED_CATEGORY_SUBS)) {
+    for (const subcategory of subs) {
+      if (!existing.has(`${category}\0${subcategory}`)) {
+        missing.push({ category, subcategory });
+      }
+    }
+  }
+  if (missing.length === 0) {
+    return { added: false, error: null as string | null };
+  }
+
+  const { error } = await supabase.from("category_items").insert(missing);
   return { added: !error, error: error?.message ?? null };
 }
 
