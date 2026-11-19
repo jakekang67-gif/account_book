@@ -9,6 +9,7 @@ import { CategoryEditor } from "@/components/CategoryEditor";
 import { ChatCleanupMenu } from "@/components/ChatCleanupMenu";
 import { ChatNoticeBanner } from "@/components/ChatNoticeBanner";
 import { InstallHelp } from "@/components/InstallHelp";
+import { PurchaseHistorySheet } from "@/components/PurchaseHistorySheet";
 import { SaveExpenseToDateDialog } from "@/components/SaveExpenseToDateDialog";
 import { CategoryPieChart } from "@/components/CategoryPieChart";
 import { LoginForm } from "@/components/LoginForm";
@@ -46,7 +47,7 @@ import {
   isChatCleanupSelectChoice,
 } from "@/lib/chatIntent";
 import { normalizeExpenseDescription } from "@/lib/expenseDescription";
-import { koreaDateString, koreaToday } from "@/lib/date";
+import { koreaToday } from "@/lib/date";
 import {
   formatMonthLabel,
   listMonths,
@@ -54,6 +55,12 @@ import {
   summarizeByCategory,
   summarizeByMonth,
 } from "@/lib/reports";
+import {
+  loadLastTab,
+  markWelcomeShownThisSession,
+  saveLastTab,
+  wasWelcomeShownThisSession,
+} from "@/lib/uiPrefs";
 import { supabase } from "@/lib/supabase";
 
 type AppTab = "chat" | "monthly" | "category";
@@ -191,7 +198,10 @@ function createMessageId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function formatCategoryLabel(item: Expense) {
+function formatCategoryLabel(item: {
+  category: string | null;
+  subcategory: string | null;
+}) {
   if (item.category && item.subcategory) {
     return `${item.category} · ${item.subcategory}`;
   }
@@ -313,6 +323,7 @@ export default function Home() {
   /** 앱을 나가며 요청이 끊긴 경우, 초안의 wasSending을 유지 */
   const preserveSendingDraftRef = useRef(false);
   const [tab, setTab] = useState<AppTab>("chat");
+  const [tabReady, setTabReady] = useState(false);
   const [reportMonth, setReportMonth] = useState("");
   const [categoryTree, setCategoryTree] =
     useState<CategoryTree>(DEFAULT_CATEGORY_TREE);
@@ -322,9 +333,9 @@ export default function Home() {
   const [chatCleanupOpen, setChatCleanupOpen] = useState(false);
   const [appMenuOpen, setAppMenuOpen] = useState(false);
   const [chatNoticeShowRequestId, setChatNoticeShowRequestId] = useState(0);
-  /** 앱 열 때 환영 안내를 잠깐만 표시 */
-  const [showWelcomeTip, setShowWelcomeTip] = useState(true);
-  const [welcomeTipEpoch, setWelcomeTipEpoch] = useState(0);
+  /** 콜드 스타트 시에만 환영 안내 (세션 내 앱 전환 시 재표시 안 함) */
+  const [showWelcomeTip, setShowWelcomeTip] = useState(false);
+  const [purchaseSheetOpen, setPurchaseSheetOpen] = useState(false);
   const [chatSelectMode, setChatSelectMode] = useState(false);
   const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
   /** 길게 눌러 단일 삭제·수정 대상 */
@@ -334,10 +345,10 @@ export default function Home() {
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [saveToDateItem, setSaveToDateItem] = useState<Expense | null>(null);
   const [saveToDateValue, setSaveToDateValue] = useState("");
+  const [saveToDateAmount, setSaveToDateAmount] = useState("");
   const [saveToDateBusy, setSaveToDateBusy] = useState(false);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
-  const leftToBackgroundRef = useRef(false);
   const [budgetListOpen, setBudgetListOpen] = useState(false);
   const [budgetEditorOpen, setBudgetEditorOpen] = useState(false);
   const [editingBudgetMonth, setEditingBudgetMonth] = useState("");
@@ -407,21 +418,47 @@ export default function Home() {
     setBudgetAlertPercent(loadBudgetAlertPercent());
   }, []);
 
-  // 환영 안내: 앱을 열 때(또는 다시 돌아올 때) 약 4초만 표시
+  // 최근 탭 복원
+  useEffect(() => {
+    const last = loadLastTab();
+    if (last) setTab(last);
+    setTabReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!tabReady) return;
+    saveLastTab(tab);
+  }, [tab, tabReady]);
+
+  // 환영 안내: 이 세션에서 아직 안 보여줬을 때만 (다른 앱 갔다 와도 재표시 안 함)
   useEffect(() => {
     if (!user?.id) return;
+    if (wasWelcomeShownThisSession()) {
+      setShowWelcomeTip(false);
+      return;
+    }
     setShowWelcomeTip(true);
+    markWelcomeShownThisSession();
     const timer = window.setTimeout(() => {
       setShowWelcomeTip(false);
     }, 5000);
     return () => window.clearTimeout(timer);
-  }, [user?.id, welcomeTipEpoch]);
+  }, [user?.id]);
+
+  // 환영 안내: 화면 터치하면 바로 닫기
+  useEffect(() => {
+    if (!showWelcomeTip) return;
+    function dismiss() {
+      setShowWelcomeTip(false);
+    }
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
+  }, [showWelcomeTip]);
 
   // 앱을 백그라운드로 내릴 때: 진행 중 요청을 실패 문구로 남기지 않고 초안에 보존
   useEffect(() => {
     function flushLeavingDraft() {
       pageLeavingRef.current = true;
-      leftToBackgroundRef.current = true;
       if (!user?.id || !sendingRef.current) return;
       const lastUser = [...messages]
         .reverse()
@@ -440,10 +477,6 @@ export default function Home() {
     function onVisible() {
       if (document.visibilityState === "visible") {
         pageLeavingRef.current = false;
-        if (leftToBackgroundRef.current) {
-          leftToBackgroundRef.current = false;
-          setWelcomeTipEpoch((n) => n + 1);
-        }
       } else {
         flushLeavingDraft();
       }
@@ -581,19 +614,24 @@ export default function Home() {
   ]);
 
   useEffect(() => {
-    // 환영 안내가 보일 때는 채팅 맨 위로 (가려지지 않게)
-    if (showWelcomeTip) {
-      chatScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
-      return;
-    }
     const onlyWelcome =
       messages.length === 1 && messages[0]?.id === "welcome" && !sending;
     if (onlyWelcome) {
       chatScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
       return;
     }
+    if (contextMessageId) return;
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, sending, showWelcomeTip]);
+  }, [messages, sending, contextMessageId]);
+
+  // 길게 누르기 메뉴가 잘리지 않도록 해당 말풍선까지 스크롤
+  useEffect(() => {
+    if (!contextMessageId) return;
+    const el = document.querySelector(
+      `[data-chat-message-id="${contextMessageId}"]`,
+    );
+    el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [contextMessageId]);
 
   // 데이터가 바뀌면 리포트용 월 기본값을 최신 월로 맞춤
   useEffect(() => {
@@ -971,7 +1009,6 @@ export default function Home() {
     setContextMessageId(null);
     setEditingMessageId(null);
     setEditDraft("");
-    setWelcomeTipEpoch((n) => n + 1);
     skipNextUserAppendRef.current = false;
     preserveSendingDraftRef.current = false;
     if (user?.id) {
@@ -1125,16 +1162,16 @@ export default function Home() {
 
   function openSaveToDate(item: Expense) {
     setSaveToDateItem(item);
-    // 기본값: 원본과 다른 날짜를 고르기 쉽게 오늘(같으면 어제)
-    const today = koreaToday();
-    setSaveToDateValue(item.date === today ? koreaDateString(-1) : today);
+    setSaveToDateValue(koreaToday());
+    setSaveToDateAmount(String(item.amount));
     setSaveToDateBusy(false);
   }
 
   async function confirmSaveToDate() {
     if (!saveToDateItem || !saveToDateValue) return;
-    if (saveToDateValue === saveToDateItem.date) {
-      window.alert("원래 날짜와 같습니다. 다른 날짜를 골라 주세요.");
+    const amount = Number(saveToDateAmount.replace(/,/g, ""));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      window.alert("금액을 확인해 주세요.");
       return;
     }
 
@@ -1142,7 +1179,7 @@ export default function Home() {
     setExpenseError(null);
     const saved = await saveExpense({
       date: saveToDateValue,
-      amount: saveToDateItem.amount,
+      amount: Math.round(amount),
       description: saveToDateItem.description,
       category: saveToDateItem.category ?? "기타",
       subcategory: saveToDateItem.subcategory ?? "기타",
@@ -1156,6 +1193,7 @@ export default function Home() {
 
     setSaveToDateItem(null);
     setSelectedId(null);
+    setPurchaseSheetOpen(false);
     pushAssistant(
       formatSavedReply({
         date: saved.date,
@@ -1801,226 +1839,63 @@ export default function Home() {
 
         {tab === "chat" && (
           <>
-        {/* 저장된 지출 카드 — 연한 색으로 대화창과 구분 */}
+        {/* 지출 합계 + 구매 내역 확인 (목록은 시트에서) */}
         <section className="shrink-0 border-b border-[#9ec0e8] bg-[#d4e8ff] px-3 py-2">
-          <div className="mb-1.5 flex items-baseline justify-between gap-3 px-0.5">
-            <p className="text-[12px] font-medium text-[#4a6a8a]">지출 내역</p>
-            <p className="text-[12px] tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
-              합계 {formatAmount(total)}
-              <span className="ml-0.5 text-[#86868b]">원</span>
-            </p>
+          <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <p className="text-[12px] font-medium text-[#4a6a8a]">지출 내역</p>
+              <p className="text-[12px] tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
+                합계 {formatAmount(total)}
+                <span className="ml-0.5 text-[#86868b]">원</span>
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPurchaseSheetOpen(true)}
+              className="shrink-0 rounded-full bg-white px-3 py-1 text-[12px] font-medium text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+            >
+              구매 내역 확인
+            </button>
           </div>
-
           {expenseError && (
-            <p className="mb-1.5 px-0.5 text-[12px] text-red-600">{expenseError}</p>
-          )}
-
-          {loadingExpenses ? (
-            <p className="rounded-2xl bg-white px-3 py-3 text-center text-[13px] text-[#86868b]">
-              불러오는 중...
-            </p>
-          ) : expenses.length === 0 ? (
-            <p className="rounded-2xl bg-white px-3 py-3 text-center text-[13px] text-[#86868b]">
-              아직 저장된 내역이 없습니다.
-            </p>
-          ) : (
-            <ul className="flex max-h-[12.5rem] flex-col gap-1.5 overflow-y-auto pr-0.5 sm:max-h-56">
-              {expenses.map((item) => {
-                const categoryLabel = formatCategoryLabel(item);
-                const isEditing = editingId === item.id && editForm;
-                const isSelected = selectedId === item.id;
-                const isBusy = busyId === item.id;
-
-                return (
-                  <li
-                    key={item.id}
-                    className={`rounded-2xl bg-white px-3 py-1 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${
-                      isSelected && !isEditing ? "ring-1 ring-black/10" : ""
-                    }`}
-                  >
-                    {isEditing ? (
-                      <div className="space-y-2.5">
-                        <input
-                          type="date"
-                          value={editForm.date}
-                          max={todayMax || undefined}
-                          onChange={(e) =>
-                            setEditForm({ ...editForm, date: e.target.value })
-                          }
-                          className={fieldClassName}
-                          disabled={isBusy}
-                          lang="ko-KR"
-                        />
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          min="1"
-                          value={editForm.amount}
-                          onChange={(e) =>
-                            setEditForm({ ...editForm, amount: e.target.value })
-                          }
-                          className={`${fieldClassName} tabular-nums [font-feature-settings:'zero'_0]`}
-                          disabled={isBusy}
-                          placeholder="금액"
-                        />
-                        <input
-                          type="text"
-                          value={editForm.description}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              description: e.target.value,
-                            })
-                          }
-                          className={fieldClassName}
-                          disabled={isBusy}
-                          placeholder="내용"
-                        />
-                        <select
-                          value={editForm.category}
-                          onChange={(e) =>
-                            updateEditCategory(e.target.value as Category)
-                          }
-                          className={fieldClassName}
-                          disabled={isBusy}
-                        >
-                          {categoryOptions.map((category) => (
-                            <option key={category} value={category}>
-                              {category}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          value={editForm.subcategory}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              subcategory: e.target.value,
-                            })
-                          }
-                          className={fieldClassName}
-                          disabled={isBusy}
-                        >
-                          {editSubOptions.map((sub) => (
-                            <option key={sub} value={sub}>
-                              {sub}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="flex gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => void handleUpdate(item.id)}
-                            disabled={isBusy}
-                            className="flex-1 rounded-xl bg-[#1d1d1f] px-3 py-2.5 text-[13px] font-medium text-white disabled:opacity-40"
-                          >
-                            {isBusy ? "저장 중..." : "저장"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={cancelEdit}
-                            disabled={isBusy}
-                            className="flex-1 rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[13px] font-medium text-[#1d1d1f] disabled:opacity-40"
-                          >
-                            취소
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => toggleSelect(item.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            toggleSelect(item.id);
-                          }
-                        }}
-                        className="flex cursor-pointer items-center justify-between gap-3"
-                      >
-                        <div className="min-w-0 flex-1 leading-tight">
-                          <p className="truncate text-[14px] font-medium leading-tight text-[#1d1d1f]">
-                            {item.description}
-                          </p>
-                          <p className="mt-0 text-[11px] leading-tight text-[#86868b]">
-                            {item.date}
-                            {categoryLabel ? ` · ${categoryLabel}` : ""}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <p className="text-[14px] font-medium leading-tight tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
-                            {formatAmount(item.amount)}
-                            <span className="ml-0.5 text-[11px] font-normal text-[#86868b]">
-                              원
-                            </span>
-                          </p>
-                          {isSelected && (
-                            <div
-                              className="flex gap-1.5"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => openSaveToDate(item)}
-                                disabled={isBusy || busyId !== null}
-                                className="rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[11px] font-medium text-[#5856d6] disabled:opacity-40"
-                              >
-                                다른 날짜
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => startEdit(item)}
-                                disabled={isBusy || busyId !== null}
-                                className="rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[11px] font-medium text-[#1d1d1f] disabled:opacity-40"
-                              >
-                                수정
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleDelete(item)}
-                                disabled={isBusy || busyId !== null}
-                                className="rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[11px] font-medium text-[#b42318] disabled:opacity-40"
-                              >
-                                {isBusy ? "삭제 중..." : "삭제"}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            <p className="mt-1.5 px-0.5 text-[12px] text-red-600">{expenseError}</p>
           )}
         </section>
+
+        {/* 환영 안내: 대화창 위 (터치 또는 5초 후 사라짐) */}
+        {showWelcomeTip && !chatSelectMode && (
+          <div
+            className="shrink-0 border-b border-black/5 bg-[#fff8e8] px-3.5 py-2"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <p className="whitespace-pre-wrap text-[13px] leading-[20px] text-[#6e6e73]">
+              {WELCOME_MESSAGE.content}
+            </p>
+          </div>
+        )}
 
         {/* 대화 영역 */}
         <div
           ref={chatScrollRef}
-          className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-3"
         >
           <ChatNoticeBanner
             active={!chatSelectMode}
             showRequestId={chatNoticeShowRequestId}
           />
-          {showWelcomeTip && !chatSelectMode && (
-            <div className="sticky top-0 z-10 mb-3 rounded-2xl border border-black/5 bg-[#fff8e8] px-3.5 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-              <p className="whitespace-pre-wrap text-[13px] leading-[20px] text-[#6e6e73]">
-                {WELCOME_MESSAGE.content}
-              </p>
-            </div>
-          )}
           {chatSelectMode && (
             <p className="mb-3 text-center text-[12px] text-[#86868b]">
               지울 대화를 선택한 뒤 아래 「선택 삭제」를 누르세요. (안내 문구는
               유지됩니다)
             </p>
           )}
-          <ul className="flex flex-col gap-3">
+          <ul
+            className={`flex flex-col gap-3 ${
+              contextMessageId ? "pb-20" : ""
+            }`}
+          >
             {messages.map((message) => {
-              // 환영 안내는 위 sticky 배너로만 표시
+              // 환영 안내는 대화창 위 배너로만 표시
               if (message.id === "welcome") {
                 return null;
               }
@@ -2053,15 +1928,12 @@ export default function Home() {
               return (
                 <li
                   key={message.id}
+                  data-chat-message-id={message.id}
                   data-chat-context={
                     showActions || isEditing ? "1" : undefined
                   }
                   className={`flex flex-col gap-1.5 ${
                     message.role === "user" ? "items-end" : "items-start"
-                  } ${
-                    message.id === "welcome"
-                      ? "transition-opacity duration-500"
-                      : ""
                   }`}
                 >
                   {selectable ? (
@@ -2190,16 +2062,16 @@ export default function Home() {
         </div>
 
         {/* 하단 입력 — 좁은 화면에서도 전송이 한 줄에 보이도록 */}
-        <div className="shrink-0 border-t border-black/5 bg-white px-2 pt-2 sm:px-3 sm:pt-3">
+        <div className="shrink-0 border-t border-black/5 bg-white px-2 pt-1.5 sm:px-3">
           {chatSelectMode ? (
-            <div className="flex gap-2 pb-2">
+            <div className="flex gap-2 pb-1.5">
               <button
                 type="button"
                 onClick={() => {
                   setChatSelectMode(false);
                   setSelectedChatIds([]);
                 }}
-                className="flex-1 rounded-2xl bg-[#f5f5f7] py-2.5 text-[14px] font-medium text-[#1d1d1f]"
+                className="flex-1 rounded-2xl bg-[#f5f5f7] py-2 text-[13px] font-medium text-[#1d1d1f]"
               >
                 취소
               </button>
@@ -2207,7 +2079,7 @@ export default function Home() {
                 type="button"
                 disabled={selectedChatIds.length === 0}
                 onClick={deleteSelectedChat}
-                className="flex-1 rounded-2xl bg-[#1d1d1f] py-2.5 text-[14px] font-medium text-white disabled:opacity-35"
+                className="flex-1 rounded-2xl bg-[#1d1d1f] py-2 text-[13px] font-medium text-white disabled:opacity-35"
               >
                 선택 삭제
                 {selectedChatIds.length > 0
@@ -2218,13 +2090,13 @@ export default function Home() {
           ) : (
             <>
               {chatError && (
-                <p className="mb-2 px-1 text-[12px] text-red-600">
+                <p className="mb-1 px-1 text-[12px] text-red-600">
                   {chatError}
                 </p>
               )}
               <form
                 onSubmit={(e) => handleSend(e)}
-                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-1.5 pb-2"
+                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-1.5 pb-1.5"
               >
                 <VoiceMicButton
                   disabled={sending}
@@ -2242,12 +2114,12 @@ export default function Home() {
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="예: 택시 20000원"
                   disabled={sending}
-                  className="min-h-11 min-w-0 w-full rounded-2xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed] disabled:opacity-60 sm:px-4"
+                  className="min-h-9 min-w-0 w-full rounded-2xl bg-[#f5f5f7] px-3 py-1.5 text-[14px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed] disabled:opacity-60 sm:px-4"
                 />
                 <button
                   type="submit"
                   disabled={sending || !input.trim()}
-                  className="min-h-11 shrink-0 rounded-2xl bg-[#1d1d1f] px-3 py-2.5 text-[13px] font-medium text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-35 sm:px-4 sm:text-[14px]"
+                  className="min-h-9 shrink-0 rounded-2xl bg-[#1d1d1f] px-3 py-1.5 text-[13px] font-medium text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-35 sm:px-4"
                 >
                   전송
                 </button>
@@ -2372,7 +2244,7 @@ export default function Home() {
         )}
 
         {/* 하단 메뉴 */}
-        <nav className="shrink-0 border-t border-black/5 bg-white px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
+        <nav className="shrink-0 border-t border-black/5 bg-white px-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1">
           <div className="grid grid-cols-3 gap-1">
             {(
               [
@@ -2387,7 +2259,7 @@ export default function Home() {
                   key={item.id}
                   type="button"
                   onClick={() => setTab(item.id)}
-                  className={`rounded-xl px-2 py-2.5 text-[13px] font-medium transition-colors ${
+                  className={`rounded-xl px-2 py-1.5 text-[12px] font-medium transition-colors ${
                     active
                       ? "bg-[#1d1d1f] text-white"
                       : "bg-transparent text-[#86868b]"
@@ -2417,18 +2289,156 @@ export default function Home() {
       <SaveExpenseToDateDialog
         open={saveToDateItem !== null}
         description={saveToDateItem?.description ?? ""}
-        amountLabel={
-          saveToDateItem
-            ? `${formatAmount(saveToDateItem.amount)}원`
-            : ""
-        }
         dateValue={saveToDateValue}
+        amountValue={saveToDateAmount}
         busy={saveToDateBusy}
         onDateChange={setSaveToDateValue}
+        onAmountChange={setSaveToDateAmount}
         onClose={() => {
           if (!saveToDateBusy) setSaveToDateItem(null);
         }}
         onSave={() => void confirmSaveToDate()}
+      />
+
+      <PurchaseHistorySheet
+        open={purchaseSheetOpen}
+        items={expenses}
+        formatAmount={formatAmount}
+        formatCategoryLabel={formatCategoryLabel}
+        selectedId={selectedId}
+        editingId={editingId}
+        onClose={() => {
+          setPurchaseSheetOpen(false);
+          cancelEdit();
+          setSelectedId(null);
+        }}
+        onSelectItem={(item) => toggleSelect(item.id)}
+        renderActions={(item) => {
+          const isBusy = busyId === item.id;
+          return (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => openSaveToDate(item as Expense)}
+                disabled={isBusy || busyId !== null}
+                className="rounded-lg bg-white px-2.5 py-1.5 text-[11px] font-medium text-[#5856d6] disabled:opacity-40"
+              >
+                다른 날짜
+              </button>
+              <button
+                type="button"
+                onClick={() => startEdit(item as Expense)}
+                disabled={isBusy || busyId !== null}
+                className="rounded-lg bg-white px-2.5 py-1.5 text-[11px] font-medium text-[#1d1d1f] disabled:opacity-40"
+              >
+                수정
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDelete(item as Expense)}
+                disabled={isBusy || busyId !== null}
+                className="rounded-lg bg-white px-2.5 py-1.5 text-[11px] font-medium text-[#b42318] disabled:opacity-40"
+              >
+                {isBusy ? "삭제 중..." : "삭제"}
+              </button>
+            </div>
+          );
+        }}
+        renderEditForm={() => {
+          if (!editForm) return null;
+          const isBusy = busyId === editingId;
+          return (
+            <div className="space-y-2">
+              <input
+                type="date"
+                value={editForm.date}
+                max={todayMax || undefined}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, date: e.target.value })
+                }
+                className={fieldClassName}
+                disabled={!!isBusy}
+                lang="ko-KR"
+              />
+              <input
+                type="number"
+                inputMode="numeric"
+                min="1"
+                value={editForm.amount}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, amount: e.target.value })
+                }
+                className={`${fieldClassName} tabular-nums [font-feature-settings:'zero'_0]`}
+                disabled={!!isBusy}
+                placeholder="금액"
+              />
+              <input
+                type="text"
+                value={editForm.description}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    description: e.target.value,
+                  })
+                }
+                className={fieldClassName}
+                disabled={!!isBusy}
+                placeholder="내용"
+              />
+              <select
+                value={editForm.category}
+                onChange={(e) =>
+                  updateEditCategory(e.target.value as Category)
+                }
+                className={fieldClassName}
+                disabled={!!isBusy}
+              >
+                {categoryOptions.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={editForm.subcategory}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    subcategory: e.target.value,
+                  })
+                }
+                className={fieldClassName}
+                disabled={!!isBusy}
+              >
+                {(categoryTree[editForm.category] ?? ["기타"]).map((sub) => (
+                  <option key={sub} value={sub}>
+                    {sub}
+                  </option>
+                ))}
+              </select>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    editingId != null ? void handleUpdate(editingId) : undefined
+                  }
+                  disabled={!!isBusy || editingId == null}
+                  className="flex-1 rounded-xl bg-[#1d1d1f] px-3 py-2 text-[13px] font-medium text-white disabled:opacity-40"
+                >
+                  {isBusy ? "저장 중..." : "저장"}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  disabled={!!isBusy}
+                  className="flex-1 rounded-xl bg-[#f5f5f7] px-3 py-2 text-[13px] font-medium text-[#1d1d1f] disabled:opacity-40"
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          );
+        }}
       />
 
       <ChatCleanupMenu

@@ -1,0 +1,190 @@
+"use client";
+
+import { useMemo, useState } from "react";
+
+export type PurchaseHistoryItem = {
+  id: number;
+  date: string;
+  amount: number;
+  description: string;
+  category: string | null;
+  subcategory: string | null;
+};
+
+type PurchaseHistorySheetProps = {
+  open: boolean;
+  items: PurchaseHistoryItem[];
+  formatAmount: (n: number) => string;
+  formatCategoryLabel: (item: PurchaseHistoryItem) => string | null;
+  onClose: () => void;
+  onSelectItem?: (item: PurchaseHistoryItem) => void;
+  renderActions?: (item: PurchaseHistoryItem) => React.ReactNode;
+  renderEditForm?: (item: PurchaseHistoryItem) => React.ReactNode;
+  selectedId?: number | null;
+  editingId?: number | null;
+};
+
+/** 구매 내역 전체·검색 */
+export function PurchaseHistorySheet({
+  open,
+  items,
+  formatAmount,
+  formatCategoryLabel,
+  onClose,
+  onSelectItem,
+  renderActions,
+  renderEditForm,
+  selectedId,
+  editingId,
+}: PurchaseHistorySheetProps) {
+  const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<"all" | "search">("all");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase().replace(/\s+/g, "");
+    if (mode === "all" || !q) return items;
+    return items.filter((item) => {
+      const hay = [
+        item.description,
+        item.date,
+        item.category ?? "",
+        item.subcategory ?? "",
+        String(item.amount),
+        formatAmount(item.amount),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .replace(/\s+/g, "");
+      return hay.includes(q);
+    });
+  }, [items, query, mode, formatAmount]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[65] flex items-end justify-center bg-black/35 sm:items-center sm:p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="purchase-history-title"
+        className="flex max-h-[85dvh] w-full max-w-md flex-col rounded-t-3xl bg-white shadow-[0_12px_40px_rgba(0,0,0,0.18)] sm:rounded-3xl"
+      >
+        <div className="flex items-center justify-between border-b border-black/5 px-4 py-3">
+          <h2
+            id="purchase-history-title"
+            className="text-[16px] font-semibold text-[#1d1d1f]"
+          >
+            구매 내역 확인
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-2 py-1 text-[13px] text-[#86868b]"
+          >
+            닫기
+          </button>
+        </div>
+
+        <div className="flex gap-2 px-4 pt-3">
+          <button
+            type="button"
+            onClick={() => {
+              setMode("all");
+              setQuery("");
+            }}
+            className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium ${
+              mode === "all"
+                ? "bg-[#1d1d1f] text-white"
+                : "bg-[#f5f5f7] text-[#1d1d1f]"
+            }`}
+          >
+            전체
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("search")}
+            className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium ${
+              mode === "search"
+                ? "bg-[#1d1d1f] text-white"
+                : "bg-[#f5f5f7] text-[#1d1d1f]"
+            }`}
+          >
+            찾아보기
+          </button>
+        </div>
+
+        {mode === "search" && (
+          <div className="px-4 pt-3">
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="단어 입력 (예: 담배)"
+              autoFocus
+              className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[14px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed]"
+            />
+          </div>
+        )}
+
+        <ul className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto px-4 pb-4">
+          {filtered.length === 0 ? (
+            <li className="rounded-2xl bg-[#f5f5f7] px-3 py-6 text-center text-[13px] text-[#86868b]">
+              {items.length === 0
+                ? "아직 저장된 내역이 없습니다."
+                : "검색 결과가 없습니다."}
+            </li>
+          ) : (
+            filtered.map((item) => {
+              const categoryLabel = formatCategoryLabel(item);
+              const isEditing = editingId === item.id;
+              const isSelected = selectedId === item.id;
+
+              if (isEditing && renderEditForm) {
+                return (
+                  <li
+                    key={item.id}
+                    className="rounded-2xl border border-black/5 bg-white px-3 py-2"
+                  >
+                    {renderEditForm(item)}
+                  </li>
+                );
+              }
+
+              return (
+                <li
+                  key={item.id}
+                  className={`rounded-2xl bg-[#f5f5f7] px-3 py-1.5 ${
+                    isSelected ? "ring-1 ring-black/10" : ""
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSelectItem?.(item)}
+                    className="flex w-full items-center justify-between gap-3 text-left"
+                  >
+                    <div className="min-w-0 flex-1 leading-tight">
+                      <p className="truncate text-[14px] font-medium text-[#1d1d1f]">
+                        {item.description}
+                      </p>
+                      <p className="text-[11px] text-[#86868b]">
+                        {item.date}
+                        {categoryLabel ? ` · ${categoryLabel}` : ""}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-[14px] font-medium tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
+                      {formatAmount(item.amount)}
+                      <span className="ml-0.5 text-[11px] font-normal text-[#86868b]">
+                        원
+                      </span>
+                    </p>
+                  </button>
+                  {isSelected && renderActions?.(item)}
+                </li>
+              );
+            })
+          )}
+        </ul>
+      </div>
+    </div>
+  );
+}

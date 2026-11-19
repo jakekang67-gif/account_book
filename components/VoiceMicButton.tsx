@@ -158,7 +158,7 @@ export function VoiceMicButton({
       aria-pressed={listening}
       aria-label={listening ? "음성 인식 중지" : "음성으로 입력"}
       title={listening ? "듣는 중… 다시 누르면 중지" : "음성으로 입력"}
-      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
         listening
           ? "bg-[#ff3b30] text-white"
           : "bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#ebebed]"

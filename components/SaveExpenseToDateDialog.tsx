@@ -1,33 +1,34 @@
 "use client";
 
-import { koreaDateString, koreaToday } from "@/lib/date";
+import { koreaToday } from "@/lib/date";
 
 type SaveExpenseToDateDialogProps = {
   open: boolean;
   description: string;
-  amountLabel: string;
   dateValue: string;
+  amountValue: string;
   busy?: boolean;
   onDateChange: (date: string) => void;
+  onAmountChange: (amount: string) => void;
   onClose: () => void;
   onSave: () => void;
 };
 
-/** 기존 지출을 다른 날짜로 새로 저장 */
+/** 다른 날짜·금액으로 새 지출 저장 (달력 + 금액) */
 export function SaveExpenseToDateDialog({
   open,
   description,
-  amountLabel,
   dateValue,
+  amountValue,
   busy,
   onDateChange,
+  onAmountChange,
   onClose,
   onSave,
 }: SaveExpenseToDateDialogProps) {
   if (!open) return null;
 
   const today = koreaToday();
-  const yesterday = koreaDateString(-1);
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-4 sm:items-center">
@@ -43,58 +44,48 @@ export function SaveExpenseToDateDialog({
         >
           다른 날짜로 저장
         </h2>
-        <p className="mt-1 text-[13px] leading-relaxed text-[#86868b]">
-          기존 내역은 그대로 두고, 같은 내용으로 새 지출을 만듭니다.
-        </p>
-        <p className="mt-3 rounded-2xl bg-[#f5f5f7] px-3.5 py-2.5 text-[14px] text-[#1d1d1f]">
-          {description}
-          <span className="ml-2 font-mono tabular-nums text-[#86868b]">
-            {amountLabel}
-          </span>
+        <p className="mt-1 text-[13px] text-[#86868b]">
+          기존 내역은 그대로 둡니다. · {description}
         </p>
 
         <label className="mt-4 block">
           <span className="mb-1.5 block text-[13px] text-[#86868b]">날짜</span>
           <input
             type="date"
-            value={dateValue}
+            value={dateValue || today}
             max={today}
             onChange={(e) => onDateChange(e.target.value)}
             className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]"
           />
         </label>
 
-        <div className="mt-2 flex gap-2">
-          <button
-            type="button"
-            onClick={() => onDateChange(today)}
-            className="flex-1 rounded-xl bg-[#f5f5f7] py-2 text-[13px] font-medium text-[#1d1d1f]"
-          >
-            오늘
-          </button>
-          <button
-            type="button"
-            onClick={() => onDateChange(yesterday)}
-            className="flex-1 rounded-xl bg-[#f5f5f7] py-2 text-[13px] font-medium text-[#1d1d1f]"
-          >
-            어제
-          </button>
-        </div>
+        <label className="mt-3 block">
+          <span className="mb-1.5 block text-[13px] text-[#86868b]">금액</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min="1"
+            value={amountValue}
+            onChange={(e) => onAmountChange(e.target.value)}
+            className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] tabular-nums text-[#1d1d1f] outline-none focus:bg-[#ebebed] [font-feature-settings:'zero'_0]"
+            placeholder="금액"
+          />
+        </label>
 
         <div className="mt-4 flex gap-2">
           <button
             type="button"
             disabled={busy}
             onClick={onClose}
-            className="flex-1 rounded-2xl bg-[#f5f5f7] py-3 text-[14px] font-medium text-[#1d1d1f] disabled:opacity-40"
+            className="flex-1 rounded-2xl bg-[#f5f5f7] py-2.5 text-[14px] font-medium text-[#1d1d1f] disabled:opacity-40"
           >
             취소
           </button>
           <button
             type="button"
-            disabled={busy || !dateValue}
+            disabled={busy || !dateValue || !amountValue}
             onClick={onSave}
-            className="flex-1 rounded-2xl bg-[#1d1d1f] py-3 text-[14px] font-medium text-white disabled:opacity-40"
+            className="flex-1 rounded-2xl bg-[#1d1d1f] py-2.5 text-[14px] font-medium text-white disabled:opacity-40"
           >
             {busy ? "저장 중..." : "저장"}
           </button>
