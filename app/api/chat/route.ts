@@ -32,8 +32,9 @@ function formatKoreanAskConfirm(expense: ExpensePayload) {
   const [, m, d] = expense.date.split("-");
   const monthDay =
     m && d ? `${Number(m)}월 ${Number(d)}일` : expense.date;
-  // 예: 11월 17일 담배 13500원 - "담배-담배"로 저장할까요?
-  return `${monthDay} ${expense.description} ${expense.amount}원 - "${expense.category}-${expense.subcategory}"로 저장할까요?`;
+  const amount = new Intl.NumberFormat("ko-KR").format(expense.amount);
+  // 예: 11월 20일 담배 10,000원을 "담배_담배"로 저장할까요?
+  return `${monthDay} ${expense.description} ${amount}원을 "${expense.category}_${expense.subcategory}"로 저장할까요?`;
 }
 
 function sleep(ms: number) {
