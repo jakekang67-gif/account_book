@@ -684,7 +684,8 @@ export default function Home() {
         .select(
           "id, created_at, date, amount, description, category, subcategory",
         )
-        .order("created_at", { ascending: false });
+        .order("date", { ascending: false })
+        .order("id", { ascending: false });
 
       if (error) {
         setExpenseError(error.message);
@@ -2132,7 +2133,12 @@ export default function Home() {
                 <p className="px-1 text-[13px] font-medium text-[#86868b]">
                   월별 총 지출
                 </p>
-                {!appMenuOpen && <MonthlyBarChart data={monthlyTotals} />}
+                {!appMenuOpen && (
+                  <MonthlyBarChart
+                    data={monthlyTotals}
+                    currentMonth={currentMonth}
+                  />
+                )}
                 <ul className="space-y-2">
                   {monthlyTotals.map((row) => (
                     <li

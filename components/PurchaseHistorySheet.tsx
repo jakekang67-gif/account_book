@@ -42,20 +42,28 @@ export function PurchaseHistorySheet({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase().replace(/\s+/g, "");
-    if (mode === "all" || !q) return items;
-    return items.filter((item) => {
-      const hay = [
-        item.description,
-        item.date,
-        item.category ?? "",
-        item.subcategory ?? "",
-        String(item.amount),
-        formatAmount(item.amount),
-      ]
-        .join(" ")
-        .toLowerCase()
-        .replace(/\s+/g, "");
-      return hay.includes(q);
+    const base =
+      mode === "all" || !q
+        ? items
+        : items.filter((item) => {
+            const hay = [
+              item.description,
+              item.date,
+              item.category ?? "",
+              item.subcategory ?? "",
+              String(item.amount),
+              formatAmount(item.amount),
+            ]
+              .join(" ")
+              .toLowerCase()
+              .replace(/\s+/g, "");
+            return hay.includes(q);
+          });
+    // 구매 날짜 최신순 (같은 날이면 id 큰 순)
+    return [...base].sort((a, b) => {
+      const byDate = b.date.localeCompare(a.date);
+      if (byDate !== 0) return byDate;
+      return b.id - a.id;
     });
   }, [items, query, mode, formatAmount]);
 
