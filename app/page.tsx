@@ -1852,10 +1852,10 @@ export default function Home() {
         {/* 환영 안내: 대화창 위 (터치 또는 5초 후 사라짐) */}
         {showWelcomeTip && !chatSelectMode && (
           <div
-            className="shrink-0 border-b border-[#e8c96a]/bg-[#ffd66e] px-3.5 py-2.5"
+            className="shrink-0 border-b border-[#e8a090] bg-[#ffc9b8] px-3.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]"
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <p className="whitespace-pre-wrap text-[15px] leading-[22px] text-[#3d3d41]">
+            <p className="whitespace-pre-wrap text-[15px] leading-[22px] text-[#8a3a28]">
               {WELCOME_MESSAGE.content}
             </p>
           </div>
