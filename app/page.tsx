@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AppMenu } from "@/components/AppMenu";
+import { MonthIncomeExpenseSheet } from "@/components/MonthIncomeExpenseSheet";
 import { useAuth } from "@/components/AuthProvider";
 import { BudgetEditor } from "@/components/BudgetEditor";
 import { BudgetList } from "@/components/BudgetList";
@@ -347,6 +348,7 @@ export default function Home() {
   const longPressTimerRef = useRef<number | null>(null);
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
   const [budgetListOpen, setBudgetListOpen] = useState(false);
+  const [monthSummaryOpen, setMonthSummaryOpen] = useState(false);
   const [budgetEditorOpen, setBudgetEditorOpen] = useState(false);
   const [editingBudgetMonth, setEditingBudgetMonth] = useState("");
   const [editingBudgetAmount, setEditingBudgetAmount] = useState<number | null>(
@@ -402,7 +404,11 @@ export default function Home() {
     () =>
       currentMonth
         ? expenses
-            .filter((item) => monthKeyFromDate(item.date) === currentMonth)
+            .filter(
+              (item) =>
+                monthKeyFromDate(item.date) === currentMonth &&
+                item.category !== "수입",
+            )
             .reduce((sum, item) => sum + item.amount, 0)
         : 0,
     [expenses, currentMonth],
@@ -1795,6 +1801,7 @@ export default function Home() {
               expenses={expenses}
               onOpenCategoryEditor={() => setCategoryEditorOpen(true)}
               onOpenBudgetList={() => void openBudgetList()}
+              onOpenMonthSummary={() => setMonthSummaryOpen(true)}
               onOpenInstallHelp={() => setInstallHelpOpen(true)}
               onOpenChatCleanup={() => setChatCleanupOpen(true)}
               onOpenChatNotice={() => {
@@ -2439,6 +2446,18 @@ export default function Home() {
         onClose={() => setChatCleanupOpen(false)}
         onClearAll={() => clearAllChat()}
         onStartSelect={() => startChatSelectCleanup(false)}
+      />
+
+      <MonthIncomeExpenseSheet
+        open={monthSummaryOpen}
+        month={currentMonth}
+        income={monthBudget}
+        expense={thisMonthSpent}
+        onClose={() => setMonthSummaryOpen(false)}
+        onEditIncome={() => {
+          setMonthSummaryOpen(false);
+          openBudgetEditor(currentMonth, monthBudget);
+        }}
       />
 
       <BudgetList

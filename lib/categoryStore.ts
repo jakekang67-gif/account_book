@@ -46,11 +46,33 @@ export async function loadCategoryTree(): Promise<{
     return loadCategoryTree();
   }
 
+  // 기존 계정에도 수입(급여·기타)이 없으면 보강
+  const ensured = await ensureIncomeCategories(rows);
+  if (ensured.added) {
+    return loadCategoryTree();
+  }
+
   return {
     tree: rowsToCategoryTree(rows),
     rows,
     error: null,
   };
+}
+
+/** 대분류 수입 + 소분류 급여·기타 보장 */
+async function ensureIncomeCategories(rows: CategoryItemRow[]) {
+  const incomeSubs = new Set(
+    rows.filter((r) => r.category === "수입").map((r) => r.subcategory),
+  );
+  const missing = (["급여", "기타"] as const).filter(
+    (sub) => !incomeSubs.has(sub),
+  );
+  if (missing.length === 0) return { added: false, error: null as string | null };
+
+  const { error } = await supabase.from("category_items").insert(
+    missing.map((subcategory) => ({ category: "수입", subcategory })),
+  );
+  return { added: !error, error: error?.message ?? null };
 }
 
 async function seedDefaultCategories() {

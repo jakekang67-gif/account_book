@@ -18,6 +18,7 @@ type AppMenuProps = {
   expenses: ExcelExpenseRow[];
   onOpenCategoryEditor?: () => void;
   onOpenBudgetList?: () => void;
+  onOpenMonthSummary?: () => void;
   onOpenInstallHelp?: () => void;
   onOpenChatCleanup?: () => void;
   onOpenChatNotice?: () => void;
@@ -31,6 +32,7 @@ export function AppMenu({
   expenses,
   onOpenCategoryEditor,
   onOpenBudgetList,
+  onOpenMonthSummary,
   onOpenInstallHelp,
   onOpenChatCleanup,
   onOpenChatNotice,
@@ -46,6 +48,7 @@ export function AppMenu({
         googleEnabled={false}
         onOpenCategoryEditor={onOpenCategoryEditor}
         onOpenBudgetList={onOpenBudgetList}
+        onOpenMonthSummary={onOpenMonthSummary}
         onOpenInstallHelp={onOpenInstallHelp}
         onOpenChatCleanup={onOpenChatCleanup}
         onOpenChatNotice={onOpenChatNotice}
@@ -60,6 +63,7 @@ export function AppMenu({
       expenses={expenses}
       onOpenCategoryEditor={onOpenCategoryEditor}
       onOpenBudgetList={onOpenBudgetList}
+      onOpenMonthSummary={onOpenMonthSummary}
       onOpenInstallHelp={onOpenInstallHelp}
       onOpenChatCleanup={onOpenChatCleanup}
       onOpenChatNotice={onOpenChatNotice}
@@ -74,6 +78,7 @@ function MenuWithGoogle({
   expenses,
   onOpenCategoryEditor,
   onOpenBudgetList,
+  onOpenMonthSummary,
   onOpenInstallHelp,
   onOpenChatCleanup,
   onOpenChatNotice,
@@ -142,6 +147,7 @@ function MenuWithGoogle({
       onConnectGoogle={() => login()}
       onOpenCategoryEditor={onOpenCategoryEditor}
       onOpenBudgetList={onOpenBudgetList}
+      onOpenMonthSummary={onOpenMonthSummary}
       onOpenInstallHelp={onOpenInstallHelp}
       onOpenChatCleanup={onOpenChatCleanup}
       onOpenChatNotice={onOpenChatNotice}
@@ -164,6 +170,7 @@ function MenuPanel({
   onConnectGoogle,
   onOpenCategoryEditor,
   onOpenBudgetList,
+  onOpenMonthSummary,
   onOpenInstallHelp,
   onOpenChatCleanup,
   onOpenChatNotice,
@@ -323,6 +330,19 @@ function MenuPanel({
                 className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
               >
                 메일로 보내기
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenMonthSummary?.();
+                }}
+                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
+              >
+                이번 달 수입·지출
               </button>
             </li>
             <li>

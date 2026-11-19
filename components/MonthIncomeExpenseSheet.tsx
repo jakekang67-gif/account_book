@@ -1,0 +1,127 @@
+"use client";
+
+import { formatMonthLabel } from "@/lib/reports";
+
+type MonthIncomeExpenseSheetProps = {
+  open: boolean;
+  month: string;
+  /** 수입 = 월 예산 */
+  income: number | null;
+  expense: number;
+  onClose: () => void;
+  onEditIncome?: () => void;
+};
+
+function formatAmount(amount: number) {
+  return new Intl.NumberFormat("ko-KR").format(amount);
+}
+
+/** 이번 달 수입·지출·결과 요약 */
+export function MonthIncomeExpenseSheet({
+  open,
+  month,
+  income,
+  expense,
+  onClose,
+  onEditIncome,
+}: MonthIncomeExpenseSheetProps) {
+  if (!open) return null;
+
+  const hasIncome = income != null && income > 0;
+  const incomeValue = hasIncome ? income : 0;
+  const result = hasIncome ? incomeValue - expense : null;
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-4 sm:items-center">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="month-income-expense-title"
+        className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-[0_12px_40px_rgba(0,0,0,0.18)]"
+      >
+        <h2
+          id="month-income-expense-title"
+          className="text-[17px] font-semibold text-[#1d1d1f]"
+        >
+          이번 달 수입·지출
+        </h2>
+        <p className="mt-1 text-[13px] text-[#86868b]">
+          {month ? formatMonthLabel(month) : "이번 달"}
+        </p>
+
+        <table className="mt-4 w-full border-collapse overflow-hidden rounded-2xl text-[15px]">
+          <tbody>
+            <tr className="border-b border-black/5 bg-[#f5f5f7]">
+              <th
+                scope="row"
+                className="px-3.5 py-3 text-left font-medium text-[#1d1d1f]"
+              >
+                수입
+              </th>
+              <td className="px-3.5 py-3 text-right tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
+                {hasIncome ? formatAmount(incomeValue) : "—"}
+              </td>
+            </tr>
+            <tr className="border-b border-black/5 bg-white">
+              <th
+                scope="row"
+                className="px-3.5 py-3 text-left font-medium text-[#1d1d1f]"
+              >
+                지출
+              </th>
+              <td className="px-3.5 py-3 text-right tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
+                {formatAmount(expense)}
+              </td>
+            </tr>
+            <tr className="bg-[#f5f5f7]">
+              <th
+                scope="row"
+                className="px-3.5 py-3 text-left font-semibold text-[#1d1d1f]"
+              >
+                결과
+              </th>
+              <td
+                className={`px-3.5 py-3 text-right font-semibold tabular-nums [font-feature-settings:'zero'_0] ${
+                  result == null
+                    ? "text-[#86868b]"
+                    : result < 0
+                      ? "text-[#b42318]"
+                      : "text-[#1d1d1f]"
+                }`}
+              >
+                {result == null
+                  ? "—"
+                  : `${result < 0 ? "- " : ""}${formatAmount(Math.abs(result))}`}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {!hasIncome && (
+          <p className="mt-3 text-[13px] leading-relaxed text-[#86868b]">
+            수입(월 예산)이 아직 없습니다. 설정하면 결과를 볼 수 있어요.
+          </p>
+        )}
+
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-2xl bg-[#f5f5f7] py-2.5 text-[14px] font-medium text-[#1d1d1f]"
+          >
+            닫기
+          </button>
+          {onEditIncome && (
+            <button
+              type="button"
+              onClick={onEditIncome}
+              className="flex-1 rounded-2xl bg-[#1d1d1f] py-2.5 text-[14px] font-medium text-white"
+            >
+              {hasIncome ? "수입 수정" : "수입 설정"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
