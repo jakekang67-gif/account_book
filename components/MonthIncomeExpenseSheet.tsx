@@ -8,6 +8,10 @@ type MonthIncomeExpenseSheetProps = {
   /** 수입 = 월 예산 */
   income: number | null;
   expense: number;
+  /** 전체 기간 수입(예산) 합 */
+  totalIncome: number | null;
+  /** 전체 기간 지출 합 */
+  totalExpense: number;
   onClose: () => void;
   onEditIncome?: () => void;
 };
@@ -16,12 +20,19 @@ function formatAmount(amount: number) {
   return new Intl.NumberFormat("ko-KR").format(amount);
 }
 
+function formatSigned(amount: number) {
+  if (amount < 0) return `- ${formatAmount(Math.abs(amount))}`;
+  return formatAmount(amount);
+}
+
 /** 이번 달 수입·지출·결과 요약 */
 export function MonthIncomeExpenseSheet({
   open,
   month,
   income,
   expense,
+  totalIncome,
+  totalExpense,
   onClose,
   onEditIncome,
 }: MonthIncomeExpenseSheetProps) {
@@ -29,7 +40,14 @@ export function MonthIncomeExpenseSheet({
 
   const hasIncome = income != null && income > 0;
   const incomeValue = hasIncome ? income : 0;
-  const result = hasIncome ? incomeValue - expense : null;
+  // 수입 없으면 지출을 마이너스로 표시
+  const expenseDisplay = hasIncome ? expense : -expense;
+  const monthlyResult = hasIncome ? incomeValue - expense : -expense;
+
+  const hasTotalIncome = totalIncome != null && totalIncome > 0;
+  const totalResult = hasTotalIncome
+    ? (totalIncome ?? 0) - totalExpense
+    : -totalExpense;
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-4 sm:items-center">
@@ -69,29 +87,42 @@ export function MonthIncomeExpenseSheet({
               >
                 지출
               </th>
-              <td className="px-3.5 py-3 text-right tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
-                {formatAmount(expense)}
+              <td
+                className={`px-3.5 py-3 text-right tabular-nums [font-feature-settings:'zero'_0] ${
+                  expenseDisplay < 0 ? "text-[#b42318]" : "text-[#1d1d1f]"
+                }`}
+              >
+                {formatSigned(expenseDisplay)}
               </td>
             </tr>
-            <tr className="bg-[#f5f5f7]">
+            <tr className="border-b border-black/5 bg-[#f5f5f7]">
               <th
                 scope="row"
                 className="px-3.5 py-3 text-left font-semibold text-[#1d1d1f]"
               >
-                결과
+                결과 (월별)
               </th>
               <td
                 className={`px-3.5 py-3 text-right font-semibold tabular-nums [font-feature-settings:'zero'_0] ${
-                  result == null
-                    ? "text-[#86868b]"
-                    : result < 0
-                      ? "text-[#b42318]"
-                      : "text-[#1d1d1f]"
+                  monthlyResult < 0 ? "text-[#b42318]" : "text-[#1d1d1f]"
                 }`}
               >
-                {result == null
-                  ? "—"
-                  : `${result < 0 ? "- " : ""}${formatAmount(Math.abs(result))}`}
+                {formatSigned(monthlyResult)}
+              </td>
+            </tr>
+            <tr className="bg-white">
+              <th
+                scope="row"
+                className="px-3.5 py-3 text-left font-semibold text-[#1d1d1f]"
+              >
+                결과 (총합계)
+              </th>
+              <td
+                className={`px-3.5 py-3 text-right font-semibold tabular-nums [font-feature-settings:'zero'_0] ${
+                  totalResult < 0 ? "text-[#b42318]" : "text-[#1d1d1f]"
+                }`}
+              >
+                {formatSigned(totalResult)}
               </td>
             </tr>
           </tbody>
@@ -99,7 +130,7 @@ export function MonthIncomeExpenseSheet({
 
         {!hasIncome && (
           <p className="mt-3 text-[13px] leading-relaxed text-[#86868b]">
-            수입(월 예산)이 아직 없습니다. 설정하면 결과를 볼 수 있어요.
+            수입(월 예산)이 없어 지출·결과를 마이너스로 표시합니다.
           </p>
         )}
 

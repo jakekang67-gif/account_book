@@ -10,6 +10,7 @@ import { CategoryEditor } from "@/components/CategoryEditor";
 import { ChatCleanupMenu } from "@/components/ChatCleanupMenu";
 import { ChatNoticeBanner } from "@/components/ChatNoticeBanner";
 import { InstallHelp } from "@/components/InstallHelp";
+import { ManualExpenseForm } from "@/components/ManualExpenseForm";
 import { PurchaseHistorySheet } from "@/components/PurchaseHistorySheet";
 import { SaveExpenseToDateDialog } from "@/components/SaveExpenseToDateDialog";
 import { CategoryPieChart } from "@/components/CategoryPieChart";
@@ -39,6 +40,7 @@ import {
 } from "@/lib/categoryStore";
 import {
   clearChatDraft,
+  filterMessagesWithinRetention,
   loadChatDraft,
   saveChatDraft,
 } from "@/lib/chatDraftStore";
@@ -51,10 +53,14 @@ import { normalizeExpenseDescription } from "@/lib/expenseDescription";
 import { koreaToday } from "@/lib/date";
 import {
   formatMonthLabel,
+  formatStatsBreakdownReply,
   listMonths,
+  matchCategoryFromText,
   monthKeyFromDate,
+  resolveStatsMonthKey,
   summarizeByCategory,
   summarizeByMonth,
+  summarizeBySubcategory,
 } from "@/lib/reports";
 import {
   markWelcomeShownThisSession,
@@ -62,7 +68,7 @@ import {
 } from "@/lib/uiPrefs";
 import { supabase } from "@/lib/supabase";
 
-type AppTab = "chat" | "monthly" | "category";
+type AppTab = "chat" | "input" | "monthly" | "category";
 
 /** expenses 테이블 한 행 */
 type Expense = {
@@ -114,8 +120,8 @@ function formatSavedReply(expense: PendingExpense) {
   const [, m, d] = expense.date.split("-");
   const monthDay =
     m && d ? `${Number(m)}월 ${Number(d)}일` : expense.date;
-  // 예: 11월 17일 담배_담배 13,500원을 저장했어요.
-  return `${monthDay} ${expense.category}_${expense.subcategory} ${formatAmount(expense.amount)}원을 저장했어요.`;
+  // 예: 11월 29일 담배 10,000원을 "담배_담배"로 저장했어요.
+  return `${monthDay} ${expense.description} ${formatAmount(expense.amount)}원을 "${expense.category}_${expense.subcategory}"로 저장했어요.`;
 }
 
 function formatAskConfirmReply(expense: PendingExpense) {
@@ -349,6 +355,8 @@ export default function Home() {
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
   const [budgetListOpen, setBudgetListOpen] = useState(false);
   const [monthSummaryOpen, setMonthSummaryOpen] = useState(false);
+  const [manualSaveBusy, setManualSaveBusy] = useState(false);
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [budgetEditorOpen, setBudgetEditorOpen] = useState(false);
   const [editingBudgetMonth, setEditingBudgetMonth] = useState("");
   const [editingBudgetAmount, setEditingBudgetAmount] = useState<number | null>(
@@ -414,12 +422,36 @@ export default function Home() {
     [expenses, currentMonth],
   );
 
+  const totalExpenseAll = useMemo(
+    () =>
+      expenses
+        .filter((item) => item.category !== "수입")
+        .reduce((sum, item) => sum + item.amount, 0),
+    [expenses],
+  );
+
+  const totalIncomeAll = useMemo(() => {
+    const fromRows = budgetRows.reduce((sum, row) => sum + row.amount, 0);
+    if (fromRows > 0) return fromRows;
+    if (monthBudget != null && monthBudget > 0) return monthBudget;
+    return null;
+  }, [budgetRows, monthBudget]);
+
+  const categorySubTotals = useMemo(() => {
+    if (!reportMonth || !expandedCategory) return [];
+    return summarizeBySubcategory(expenses, reportMonth, expandedCategory);
+  }, [expenses, reportMonth, expandedCategory]);
+
   useEffect(() => {
     const today = koreaToday();
     setTodayMax(today);
     setCurrentMonth(today.slice(0, 7));
     setBudgetAlertPercent(loadBudgetAlertPercent());
   }, []);
+
+  useEffect(() => {
+    setExpandedCategory(null);
+  }, [reportMonth]);
 
   // 환영 안내: 이 세션에서 아직 안 보여줬을 때만 (다른 앱 갔다 와도 재표시 안 함)
   useEffect(() => {
@@ -514,9 +546,11 @@ export default function Home() {
     const draft = loadChatDraft(previousUserId);
     if (draft && draft.messages.length > 0) {
       // 환영 문구는 최신 문구로 맞춤, 끊김 오류 문구는 제거
-      const restored = scrubDraftMessages(
-        (draft.messages as ChatMessage[]).map((m) =>
-          m.id === "welcome" ? { ...m, content: WELCOME_MESSAGE.content } : m,
+      const restored = filterMessagesWithinRetention(
+        scrubDraftMessages(
+          (draft.messages as ChatMessage[]).map((m) =>
+            m.id === "welcome" ? { ...m, content: WELCOME_MESSAGE.content } : m,
+          ),
         ),
       );
       setMessages(restored.length > 0 ? restored : [WELCOME_MESSAGE]);
@@ -1597,7 +1631,7 @@ export default function Home() {
       }
 
       if (intent === "stats") {
-        // 최신 지출을 Supabase에서 다시 가져와 Gemini에 전달
+        // 분류 탭과 동일한 집계로 답변 (AI 합산 오차 방지)
         const { data: rows, error: fetchError } = await supabase
           .from("expenses")
           .select("date, amount, description, category, subcategory")
@@ -1609,31 +1643,16 @@ export default function Home() {
           );
         }
 
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: text,
-            history: historyForApi.slice(-6, -1),
-            mode: "stats",
-            expenses: rows ?? [],
-          }),
-        });
-
-        const data = (await response.json()) as {
-          reply?: string;
-          error?: string;
-        };
-
-        if (!response.ok) {
-          throw new Error(
-            data.error ?? "AI 응답에 실패했습니다. 잠시 후 다시 시도해 주세요.",
-          );
-        }
-
+        const monthKey = resolveStatsMonthKey(
+          text,
+          currentMonth || koreaToday().slice(0, 7),
+        );
+        const filterCat = matchCategoryFromText(
+          text,
+          Object.keys(categoryTree),
+        );
         pushAssistant(
-          data.reply?.trim() ||
-            "질문을 이해하지 못했어요. 예: “이번 달 총 지출이 얼마야?”",
+          formatStatsBreakdownReply(rows ?? [], monthKey, filterCat),
         );
         return;
       }
@@ -1773,7 +1792,41 @@ export default function Home() {
   const total = expenses.reduce((sum, item) => sum + item.amount, 0);
 
   const tabTitle =
-    tab === "chat" ? "나의 AI 챗가계부" : tab === "monthly" ? "월별 지출" : "카테고리별 지출";
+    tab === "chat"
+      ? "나의 AI 챗가계부"
+      : tab === "input"
+        ? "직접 입력"
+        : tab === "monthly"
+          ? "월별 지출"
+          : "카테고리별 지출";
+
+  async function saveManualExpense(payload: {
+    date: string;
+    amount: number;
+    description: string;
+    category: string;
+    subcategory: string;
+  }) {
+    setManualSaveBusy(true);
+    setExpenseError(null);
+    const saved = await saveExpense(payload);
+    setManualSaveBusy(false);
+    if (!saved) {
+      window.alert("저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      return false;
+    }
+    setTab("chat");
+    pushAssistant(
+      formatSavedReply({
+        date: saved.date,
+        amount: saved.amount,
+        description: saved.description,
+        category: saved.category ?? payload.category,
+        subcategory: saved.subcategory ?? payload.subcategory,
+      }),
+    );
+    return true;
+  }
 
   if (authLoading) {
     return (
@@ -1801,7 +1854,10 @@ export default function Home() {
               expenses={expenses}
               onOpenCategoryEditor={() => setCategoryEditorOpen(true)}
               onOpenBudgetList={() => void openBudgetList()}
-              onOpenMonthSummary={() => setMonthSummaryOpen(true)}
+              onOpenMonthSummary={() => {
+                void refreshBudgetList();
+                setMonthSummaryOpen(true);
+              }}
               onOpenInstallHelp={() => setInstallHelpOpen(true)}
               onOpenChatCleanup={() => setChatCleanupOpen(true)}
               onOpenChatNotice={() => {
@@ -2125,6 +2181,17 @@ export default function Home() {
           </>
         )}
 
+        {tab === "input" && (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <ManualExpenseForm
+              categoryTree={categoryTree}
+              todayMax={todayMax}
+              busy={manualSaveBusy}
+              onSave={saveManualExpense}
+            />
+          </div>
+        )}
+
         {tab === "monthly" && (
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             {loadingExpenses ? (
@@ -2219,22 +2286,63 @@ export default function Home() {
                       <CategoryPieChart data={categoryTotals} />
                     )}
                     <ul className="space-y-2">
-                      {categoryTotals.map((row) => (
-                        <li
-                          key={row.category}
-                          className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-                        >
-                          <p className="text-[15px] font-medium text-[#1d1d1f]">
-                            {row.category}
-                          </p>
-                          <p className="text-[16px] font-medium tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
-                            {formatAmount(row.total)}
-                            <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
-                              원
-                            </span>
-                          </p>
-                        </li>
-                      ))}
+                      {categoryTotals.map((row) => {
+                        const open = expandedCategory === row.category;
+                        return (
+                          <li
+                            key={row.category}
+                            className="rounded-2xl bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                          >
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedCategory(open ? null : row.category)
+                              }
+                              className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                            >
+                              <p className="text-[15px] font-medium text-[#1d1d1f]">
+                                {row.category}
+                                <span className="ml-2 text-[12px] font-normal text-[#86868b]">
+                                  {open ? "접기" : "소분류"}
+                                </span>
+                              </p>
+                              <p className="text-[16px] font-medium tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
+                                {formatAmount(row.total)}
+                                <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
+                                  원
+                                </span>
+                              </p>
+                            </button>
+                            {open && (
+                              <ul className="space-y-1 border-t border-black/5 px-4 py-2.5">
+                                {(categorySubTotals.length > 0
+                                  ? categorySubTotals
+                                  : summarizeBySubcategory(
+                                      expenses,
+                                      reportMonth,
+                                      row.category,
+                                    )
+                                ).map((sub) => (
+                                  <li
+                                    key={sub.subcategory}
+                                    className="flex items-center justify-between gap-3 py-1.5"
+                                  >
+                                    <p className="text-[13px] text-[#6e6e73]">
+                                      {sub.subcategory}
+                                    </p>
+                                    <p className="text-[14px] tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
+                                      {formatAmount(sub.total)}
+                                      <span className="ml-0.5 text-[11px] text-[#86868b]">
+                                        원
+                                      </span>
+                                    </p>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   </>
                 )}
@@ -2245,10 +2353,11 @@ export default function Home() {
 
         {/* 하단 메뉴 */}
         <nav className="shrink-0 border-t border-black/5 bg-white px-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1">
-          <div className="grid grid-cols-3 gap-1">
+          <div className="grid grid-cols-4 gap-0.5">
             {(
               [
                 { id: "chat", label: "채팅" },
+                { id: "input", label: "입력" },
                 { id: "monthly", label: "월별" },
                 { id: "category", label: "분류" },
               ] as const
@@ -2453,6 +2562,8 @@ export default function Home() {
         month={currentMonth}
         income={monthBudget}
         expense={thisMonthSpent}
+        totalIncome={totalIncomeAll}
+        totalExpense={totalExpenseAll}
         onClose={() => setMonthSummaryOpen(false)}
         onEditIncome={() => {
           setMonthSummaryOpen(false);

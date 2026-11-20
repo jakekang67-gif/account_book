@@ -259,6 +259,13 @@ function MenuPanel({
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) {
+        if (response.status === 401) {
+          clearGoogleSession();
+          setSession(null);
+          throw new Error(
+            "구글 연결이 만료됐어요. 메뉴에서 「구글 계정 연결」을 다시 해주세요.",
+          );
+        }
         throw new Error(data.error ?? "메일 발송에 실패했습니다.");
       }
       setStatus(`${session.email}로 메일을 보냈습니다.`);
