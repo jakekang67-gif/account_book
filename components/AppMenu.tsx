@@ -19,6 +19,7 @@ type AppMenuProps = {
   onOpenCategoryEditor?: () => void;
   onOpenBudgetList?: () => void;
   onOpenMonthSummary?: () => void;
+  onOpenRecurring?: () => void;
   onOpenInstallHelp?: () => void;
   onOpenChatCleanup?: () => void;
   onOpenChatNotice?: () => void;
@@ -33,6 +34,7 @@ export function AppMenu({
   onOpenCategoryEditor,
   onOpenBudgetList,
   onOpenMonthSummary,
+  onOpenRecurring,
   onOpenInstallHelp,
   onOpenChatCleanup,
   onOpenChatNotice,
@@ -49,6 +51,7 @@ export function AppMenu({
         onOpenCategoryEditor={onOpenCategoryEditor}
         onOpenBudgetList={onOpenBudgetList}
         onOpenMonthSummary={onOpenMonthSummary}
+        onOpenRecurring={onOpenRecurring}
         onOpenInstallHelp={onOpenInstallHelp}
         onOpenChatCleanup={onOpenChatCleanup}
         onOpenChatNotice={onOpenChatNotice}
@@ -64,6 +67,7 @@ export function AppMenu({
       onOpenCategoryEditor={onOpenCategoryEditor}
       onOpenBudgetList={onOpenBudgetList}
       onOpenMonthSummary={onOpenMonthSummary}
+      onOpenRecurring={onOpenRecurring}
       onOpenInstallHelp={onOpenInstallHelp}
       onOpenChatCleanup={onOpenChatCleanup}
       onOpenChatNotice={onOpenChatNotice}
@@ -79,6 +83,7 @@ function MenuWithGoogle({
   onOpenCategoryEditor,
   onOpenBudgetList,
   onOpenMonthSummary,
+  onOpenRecurring,
   onOpenInstallHelp,
   onOpenChatCleanup,
   onOpenChatNotice,
@@ -148,6 +153,7 @@ function MenuWithGoogle({
       onOpenCategoryEditor={onOpenCategoryEditor}
       onOpenBudgetList={onOpenBudgetList}
       onOpenMonthSummary={onOpenMonthSummary}
+      onOpenRecurring={onOpenRecurring}
       onOpenInstallHelp={onOpenInstallHelp}
       onOpenChatCleanup={onOpenChatCleanup}
       onOpenChatNotice={onOpenChatNotice}
@@ -171,6 +177,7 @@ function MenuPanel({
   onOpenCategoryEditor,
   onOpenBudgetList,
   onOpenMonthSummary,
+  onOpenRecurring,
   onOpenInstallHelp,
   onOpenChatCleanup,
   onOpenChatNotice,
@@ -239,7 +246,9 @@ function MenuPanel({
       return;
     }
     if (!session) {
-      setStatus("먼저 구글 계정을 연결해 주세요.");
+      setStatus(
+        "먼저 메뉴에서 「구글 계정 연결」을 해주세요. 연결이 오래되면 다시 연결해야 메일이 갑니다.",
+      );
       return;
     }
 
@@ -350,6 +359,19 @@ function MenuPanel({
                 className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
               >
                 이번 달 수입·지출
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenRecurring?.();
+                }}
+                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
+              >
+                정기 지출
               </button>
             </li>
             <li>

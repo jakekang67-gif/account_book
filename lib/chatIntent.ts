@@ -2,7 +2,14 @@
  * 챗봇 메시지 의도: 지출 입력 vs 통계/조회 vs 채팅 삭제
  */
 
-export type ChatIntent = "expense" | "stats" | "chat_cleanup";
+export type ChatIntent = "expense" | "stats" | "chat_cleanup" | "recurring_stats";
+
+/** 정기 지출 조회 */
+export function looksLikeRecurringStats(text: string) {
+  const t = text.trim();
+  if (!t || hasExpenseAmount(t)) return false;
+  return /정기\s*지출|정기지출/.test(t);
+}
 
 /** 금액이 포함되어 있으면 지출 입력으로 봅니다. */
 export function hasExpenseAmount(text: string) {
@@ -93,6 +100,7 @@ export function isChatCleanupSelectChoice(text: string) {
 export function detectChatIntent(text: string): ChatIntent {
   if (hasExpenseAmount(text)) return "expense";
   if (looksLikeChatCleanupRequest(text)) return "chat_cleanup";
+  if (looksLikeRecurringStats(text)) return "recurring_stats";
   if (looksLikeStatsQuestion(text)) return "stats";
   return "expense";
 }

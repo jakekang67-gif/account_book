@@ -12,6 +12,7 @@ import { ChatNoticeBanner } from "@/components/ChatNoticeBanner";
 import { InstallHelp } from "@/components/InstallHelp";
 import { ManualExpenseForm } from "@/components/ManualExpenseForm";
 import { PurchaseHistorySheet } from "@/components/PurchaseHistorySheet";
+import { RecurringExpenseSheet } from "@/components/RecurringExpenseSheet";
 import { SaveExpenseToDateDialog } from "@/components/SaveExpenseToDateDialog";
 import { CategoryPieChart } from "@/components/CategoryPieChart";
 import { LoginForm } from "@/components/LoginForm";
@@ -52,16 +53,29 @@ import {
 import { normalizeExpenseDescription } from "@/lib/expenseDescription";
 import { koreaToday } from "@/lib/date";
 import {
+  applyDueRecurringExpenses,
+  deleteRecurringExpense,
+  loadRecurringExpenses,
+  saveRecurringExpense,
+  summarizeRecurringForMonth,
+  type RecurringExpense,
+} from "@/lib/recurringStore";
+import {
   formatMonthLabel,
   formatStatsBreakdownReply,
   listMonths,
-  matchCategoryFromText,
   monthKeyFromDate,
   resolveStatsMonthKey,
   summarizeByCategory,
   summarizeByMonth,
   summarizeBySubcategory,
 } from "@/lib/reports";
+import {
+  findStatsCandidates,
+  formatStatsConfirmQuestion,
+  pickStatsCandidate,
+  type StatsCandidate,
+} from "@/lib/statsMatch";
 import {
   markWelcomeShownThisSession,
   wasWelcomeShownThisSession,
@@ -109,7 +123,11 @@ type PendingExpense = {
   sourceMessageId?: string | null;
 };
 
-type PendingPhase = "confirm" | "await_category" | "await_chat_cleanup";
+type PendingPhase =
+  | "confirm"
+  | "await_category"
+  | "await_chat_cleanup"
+  | "await_stats_confirm";
 
 /** 금액 천단위 콤마 */
 function formatAmount(amount: number) {
@@ -355,6 +373,15 @@ export default function Home() {
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
   const [budgetListOpen, setBudgetListOpen] = useState(false);
   const [monthSummaryOpen, setMonthSummaryOpen] = useState(false);
+  const [recurringOpen, setRecurringOpen] = useState(false);
+  const [recurringRows, setRecurringRows] = useState<RecurringExpense[]>([]);
+  const [recurringLoading, setRecurringLoading] = useState(false);
+  const [recurringBusy, setRecurringBusy] = useState(false);
+  const [recurringError, setRecurringError] = useState<string | null>(null);
+  const [pendingStatsMonth, setPendingStatsMonth] = useState("");
+  const [pendingStatsCandidates, setPendingStatsCandidates] = useState<
+    StatsCandidate[]
+  >([]);
   const [manualSaveBusy, setManualSaveBusy] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [budgetEditorOpen, setBudgetEditorOpen] = useState(false);
@@ -538,8 +565,12 @@ export default function Home() {
     }
 
     const previousUserId = user.id;
-    void loadExpenses();
     void refreshCategories();
+    void (async () => {
+      const applied = await applyDueRecurringExpenses();
+      if (applied.error) setRecurringError(applied.error);
+      await loadExpenses();
+    })();
 
     // 로그인 사용자별 채팅 초안 복구
     chatDraftReadyRef.current = false;
@@ -555,7 +586,13 @@ export default function Home() {
       );
       setMessages(restored.length > 0 ? restored : [WELCOME_MESSAGE]);
       setPendingExpense(draft.pendingExpense);
-      setPendingPhase(draft.pendingPhase);
+      // 통계 확인 후보는 메모리에만 있어 복원 시 초기화
+      setPendingPhase(
+        draft.pendingPhase === "await_stats_confirm"
+          ? null
+          : draft.pendingPhase,
+      );
+      setPendingStatsCandidates([]);
       setInput(draft.input || "");
       const last = restored[restored.length - 1];
       const resumeText =
@@ -712,6 +749,29 @@ export default function Home() {
   async function openBudgetList() {
     setBudgetListOpen(true);
     await refreshBudgetList();
+  }
+
+  async function refreshRecurring() {
+    setRecurringLoading(true);
+    const result = await loadRecurringExpenses();
+    setRecurringLoading(false);
+    if (result.error) {
+      setRecurringError(result.error);
+      setRecurringRows([]);
+      return;
+    }
+    setRecurringError(null);
+    setRecurringRows(result.rows);
+  }
+
+  async function openRecurringSheet() {
+    setRecurringOpen(true);
+    const applied = await applyDueRecurringExpenses(
+      currentMonth || koreaToday().slice(0, 7),
+    );
+    if (applied.error) setRecurringError(applied.error);
+    if (applied.applied > 0) await loadExpenses();
+    await refreshRecurring();
   }
 
   async function loadExpenses() {
@@ -1485,11 +1545,16 @@ export default function Home() {
       // 저장 확인 중에도 통계·채팅삭제면 대기 건을 취소하고 해당 의도로 처리
       const earlyIntent = detectChatIntent(text);
       if (
-        (earlyIntent === "stats" || earlyIntent === "chat_cleanup") &&
-        (pendingPhase === "confirm" || pendingPhase === "await_category")
+        (earlyIntent === "stats" ||
+          earlyIntent === "chat_cleanup" ||
+          earlyIntent === "recurring_stats") &&
+        (pendingPhase === "confirm" ||
+          pendingPhase === "await_category" ||
+          pendingPhase === "await_stats_confirm")
       ) {
         setPendingExpense(null);
         setPendingPhase(null);
+        setPendingStatsCandidates([]);
       }
 
       // 0) 채팅 삭제 방식 고르는 단계
@@ -1517,12 +1582,58 @@ export default function Home() {
         return;
       }
 
+      // 0-b) 통계 분류 확인 단계
+      if (
+        pendingPhase === "await_stats_confirm" &&
+        earlyIntent !== "chat_cleanup" &&
+        earlyIntent !== "recurring_stats"
+      ) {
+        if (isNegative(text)) {
+          setPendingPhase(null);
+          setPendingStatsCandidates([]);
+          pushAssistant("알겠어요. 다른 분류로 다시 물어봐 주세요.");
+          return;
+        }
+
+        const picked = pickStatsCandidate(text, pendingStatsCandidates);
+        if (!picked) {
+          pushAssistant(formatStatsConfirmQuestion(pendingStatsCandidates));
+          return;
+        }
+
+        const monthKey =
+          pendingStatsMonth ||
+          currentMonth ||
+          koreaToday().slice(0, 7);
+        const { data: rows, error: fetchError } = await supabase
+          .from("expenses")
+          .select("date, amount, description, category, subcategory")
+          .order("date", { ascending: false });
+        if (fetchError) {
+          throw new Error(
+            `지출 데이터를 불러오지 못했어요: ${fetchError.message}`,
+          );
+        }
+        setPendingPhase(null);
+        setPendingStatsCandidates([]);
+        pushAssistant(
+          formatStatsBreakdownReply(
+            rows ?? [],
+            monthKey,
+            picked.category,
+            picked.subcategory,
+          ),
+        );
+        return;
+      }
+
       // 1) 저장 확인 단계
       if (
         pendingPhase === "confirm" &&
         pendingExpense &&
         earlyIntent !== "stats" &&
-        earlyIntent !== "chat_cleanup"
+        earlyIntent !== "chat_cleanup" &&
+        earlyIntent !== "recurring_stats"
       ) {
         if (isAffirmative(text)) {
           await commitPending(pendingExpense);
@@ -1545,7 +1656,8 @@ export default function Home() {
         pendingPhase === "await_category" &&
         pendingExpense &&
         earlyIntent !== "stats" &&
-        earlyIntent !== "chat_cleanup"
+        earlyIntent !== "chat_cleanup" &&
+        earlyIntent !== "recurring_stats"
       ) {
         const localPair = parseCategoryFromText(text, categoryTree);
         if (localPair) {
@@ -1630,30 +1742,52 @@ export default function Home() {
         return;
       }
 
-      if (intent === "stats") {
-        // 분류 탭과 동일한 집계로 답변 (AI 합산 오차 방지)
-        const { data: rows, error: fetchError } = await supabase
-          .from("expenses")
-          .select("date, amount, description, category, subcategory")
-          .order("date", { ascending: false });
-
-        if (fetchError) {
-          throw new Error(
-            `지출 데이터를 불러오지 못했어요: ${fetchError.message}`,
+      if (intent === "recurring_stats") {
+        const { rows, error } = await loadRecurringExpenses();
+        if (error) {
+          pushAssistant(
+            `정기 지출을 불러오지 못했어요. (${error})\nSupabase에서 create_recurring_expenses.sql 실행 여부를 확인해 주세요.`,
           );
+          return;
         }
+        const monthKey = currentMonth || koreaToday().slice(0, 7);
+        const summary = summarizeRecurringForMonth(rows, monthKey);
+        if (summary.due.length === 0) {
+          pushAssistant(
+            `${formatMonthLabel(monthKey)}에 해당하는 정기 지출이 없어요.`,
+          );
+          return;
+        }
+        const lines = [
+          `${formatMonthLabel(monthKey)} 정기 지출`,
+          `합계 : ${formatAmount(summary.total)}원`,
+          ...summary.categories.map(
+            (c) => `${c.category} : ${formatAmount(c.amount)}원`,
+          ),
+        ];
+        pushAssistant(lines.join("\n"));
+        return;
+      }
 
+      if (intent === "stats") {
         const monthKey = resolveStatsMonthKey(
           text,
           currentMonth || koreaToday().slice(0, 7),
         );
-        const filterCat = matchCategoryFromText(
-          text,
-          Object.keys(categoryTree),
-        );
-        pushAssistant(
-          formatStatsBreakdownReply(rows ?? [], monthKey, filterCat),
-        );
+        const candidates = findStatsCandidates(text, categoryTree);
+        if (candidates.length === 0) {
+          setPendingPhase("await_stats_confirm");
+          setPendingStatsMonth(monthKey);
+          setPendingStatsCandidates([]);
+          pushAssistant(formatStatsConfirmQuestion([]));
+          return;
+        }
+
+        // 후보를 확인받은 뒤에만 금액을 답함 (전체 목록 무단 표시 방지)
+        setPendingPhase("await_stats_confirm");
+        setPendingStatsMonth(monthKey);
+        setPendingStatsCandidates(candidates);
+        pushAssistant(formatStatsConfirmQuestion(candidates));
         return;
       }
 
@@ -1858,6 +1992,7 @@ export default function Home() {
                 void refreshBudgetList();
                 setMonthSummaryOpen(true);
               }}
+              onOpenRecurring={() => void openRecurringSheet()}
               onOpenInstallHelp={() => setInstallHelpOpen(true)}
               onOpenChatCleanup={() => setChatCleanupOpen(true)}
               onOpenChatNotice={() => {
@@ -2155,7 +2290,7 @@ export default function Home() {
                   onTranscript={(text) => {
                     setChatError(null);
                     setInput(text);
-                    void handleSend(undefined, text);
+                    inputRef.current?.focus();
                   }}
                 />
                 <input
@@ -2163,7 +2298,7 @@ export default function Home() {
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="예: 택시 20000원"
+                  placeholder="오늘 커피 5000원"
                   disabled={sending}
                   className="min-h-9 min-w-0 w-full rounded-2xl bg-[#f5f5f7] px-3 py-1.5 text-[14px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed] disabled:opacity-60 sm:px-4"
                 />
@@ -2568,6 +2703,37 @@ export default function Home() {
         onEditIncome={() => {
           setMonthSummaryOpen(false);
           openBudgetEditor(currentMonth, monthBudget);
+        }}
+      />
+
+      <RecurringExpenseSheet
+        open={recurringOpen}
+        rows={recurringRows}
+        categoryTree={categoryTree}
+        loading={recurringLoading}
+        error={recurringError}
+        busy={recurringBusy}
+        onClose={() => setRecurringOpen(false)}
+        onSave={async (input) => {
+          setRecurringBusy(true);
+          const result = await saveRecurringExpense(input);
+          if (!result.error) {
+            const applied = await applyDueRecurringExpenses(
+              currentMonth || koreaToday().slice(0, 7),
+            );
+            if (applied.error) setRecurringError(applied.error);
+            await refreshRecurring();
+            await loadExpenses();
+          }
+          setRecurringBusy(false);
+          return result.error;
+        }}
+        onDelete={async (id) => {
+          setRecurringBusy(true);
+          const result = await deleteRecurringExpense(id);
+          if (!result.error) await refreshRecurring();
+          setRecurringBusy(false);
+          return result.error;
         }}
       />
 

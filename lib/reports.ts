@@ -120,8 +120,23 @@ export function formatStatsBreakdownReply(
   expenses: ExpenseLike[],
   monthKey: string,
   filterCategory?: string | null,
+  filterSubcategory?: string | null,
 ) {
   const monthLabel = formatMonthLabel(monthKey);
+
+  if (filterCategory && filterSubcategory) {
+    const subs = summarizeBySubcategory(
+      expenses,
+      monthKey,
+      filterCategory,
+    ).filter((row) => row.subcategory === filterSubcategory);
+    if (subs.length === 0) {
+      return `${monthLabel} 「${filterCategory}_${filterSubcategory}」 기록이 아직 없어요.`;
+    }
+    const total = subs.reduce((s, r) => s + r.total, 0);
+    return `${monthLabel}\n${filterCategory} : ${formatWon(total)}\n - ${filterSubcategory} : ${formatWon(total)}`;
+  }
+
   const categories = filterCategory
     ? summarizeByCategory(expenses, monthKey).filter(
         (row) => row.category === filterCategory,
