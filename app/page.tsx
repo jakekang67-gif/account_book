@@ -150,12 +150,27 @@ function formatAskConfirmReply(expense: PendingExpense) {
   return `${monthDay} ${expense.description} ${formatAmount(expense.amount)}원을 "${expense.category}_${expense.subcategory}"로 저장할까요?`;
 }
 
-/** 승인 의도 (네/응/저장 등) */
+/** 승인 의도 (네/응/저장, "응 저장" 등) */
 function isAffirmative(text: string) {
   const t = text.trim().toLowerCase().replace(/\s+/g, "");
-  return /^(네|녜|예|응|어|ㅇㅇ|ㅇㅋ|ok|okay|yes|y|좋아|좋아요|그래|그래요|맞아|맞아요|저장|저장해|저장해주세요|저장해줘|저장할게요|그렇게|그렇게해|그렇게해주세요|그렇게해줘|진행|진행해|진행해줘)$/i.test(
+  if (!t || t.length > 20) return false;
+  if (
+    /^(네|녜|예|응|어|ㅇㅇ|ㅇㅋ|ok|okay|yes|y|좋아|좋아요|그래|그래요|맞아|맞아요|저장|저장해|저장해주세요|저장해줘|저장할게|저장할게요|그렇게|그렇게해|그렇게해주세요|그렇게해줘|진행|진행해|진행해줘)$/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  // 예: 응저장, 네저장해줘, 어그래저장
+  return /^(네|녜|예|응|어|ㅇㅇ|그래|맞아|좋아|ok|yes)?(그럼)?(저장|저장해|저장해줘|저장해주세요|저장할게|저장할게요|그래|그렇게해|진행|진행해줘?)$/i.test(
     t,
   );
+}
+
+/** 음성으로 「전송」이라고 말한 경우 */
+function isSendCommand(text: string) {
+  const t = text.trim().toLowerCase().replace(/\s+/g, "");
+  return /^(전송|전송해|전송해줘|전송해주세요|보내|보내줘|보내주세요)$/i.test(t);
 }
 
 /** 거절 의도 */
@@ -2289,7 +2304,29 @@ export default function Home() {
                   onError={(message) => setChatError(message)}
                   onTranscript={(text) => {
                     setChatError(null);
-                    setInput(text);
+                    const trimmed = text.trim();
+                    // 음성 「전송」→ 입력칸 내용을 보내기(저장 확인 중이면 긍정 답도 동일)
+                    if (isSendCommand(trimmed)) {
+                      const payload = input.trim();
+                      if (!payload) {
+                        setChatError(
+                          "보낼 내용이 없어요. 먼저 말하거나 입력한 뒤 「전송」해 주세요.",
+                        );
+                        return;
+                      }
+                      void handleSend(undefined, payload);
+                      return;
+                    }
+                    // 저장할까요? 단계에서 응/저장 등이면 바로 전송
+                    if (
+                      (pendingPhase === "confirm" ||
+                        pendingPhase === "await_stats_confirm") &&
+                      isAffirmative(trimmed)
+                    ) {
+                      void handleSend(undefined, trimmed);
+                      return;
+                    }
+                    setInput(trimmed);
                     inputRef.current?.focus();
                   }}
                 />
