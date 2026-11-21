@@ -76,7 +76,8 @@ export async function loadRecurringExpenses(): Promise<{
       "id, description, amount, category, subcategory, interval_months, start_date, last_applied_month, active",
     )
     .eq("active", true)
-    .order("id", { ascending: false });
+    .order("start_date", { ascending: true })
+    .order("id", { ascending: true });
 
   if (error) return { rows: [], error: error.message };
   return { rows: (data as RecurringExpense[]) ?? [], error: null };
