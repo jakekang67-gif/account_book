@@ -56,7 +56,7 @@ export function RecurringExpenseSheet({
     (categoryTree[defaultCategory] ?? ["기타"])[0] ?? "기타",
   );
   const [intervalMonths, setIntervalMonths] = useState("1");
-  const [startDate, setStartDate] = useState(koreaToday());
+  const [startDate, setStartDate] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
 
@@ -87,9 +87,19 @@ export function RecurringExpenseSheet({
     }
   }, [subs, subcategory]);
 
-  if (!open) return null;
-
   function resetForm() {
+    setEditingId(null);
+    setDescription("");
+    setAmount("");
+    setCategory(defaultCategory);
+    setSubcategory((categoryTree[defaultCategory] ?? ["기타"])[0] ?? "기타");
+    setIntervalMonths("1");
+    setStartDate("");
+    setFormError(null);
+    setShowForm(false);
+  }
+
+  function startAdd() {
     setEditingId(null);
     setDescription("");
     setAmount("");
@@ -98,7 +108,7 @@ export function RecurringExpenseSheet({
     setIntervalMonths("1");
     setStartDate(koreaToday());
     setFormError(null);
-    setShowForm(false);
+    setShowForm(true);
   }
 
   function startEdit(row: RecurringExpense) {
@@ -129,6 +139,10 @@ export function RecurringExpenseSheet({
       setFormError("주기는 1~60개월 숫자로 입력해 주세요.");
       return;
     }
+    if (!startDate) {
+      setFormError("시작일을 선택해 주세요.");
+      return;
+    }
     const err = await onSave({
       id: editingId ?? undefined,
       description: description.trim(),
@@ -144,6 +158,8 @@ export function RecurringExpenseSheet({
     }
     resetForm();
   }
+
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 sm:items-center sm:p-4">
@@ -186,20 +202,118 @@ export function RecurringExpenseSheet({
             </p>
           )}
 
-          {showForm ? (
-            <form
-              onSubmit={(e) => void handleSubmit(e)}
-              className="mb-4 space-y-2.5 rounded-2xl border border-black/5 p-3"
+          <button
+            type="button"
+            onClick={startAdd}
+            disabled={busy}
+            className="mb-3 w-full rounded-2xl bg-[#1d1d1f] py-2.5 text-[14px] font-medium text-white disabled:opacity-40"
+          >
+            정기 지출 추가
+          </button>
+
+          <div className="mb-4 flex items-center justify-between rounded-2xl bg-[#f5f5f7] px-3.5 py-2.5">
+            <p className="text-[13px] font-medium text-[#86868b]">총 합계</p>
+            <p className="text-[15px] font-semibold tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
+              {formatAmount(totalAmount)}
+              <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
+                원
+              </span>
+            </p>
+          </div>
+
+          {loading ? (
+            <p className="py-8 text-center text-[13px] text-[#86868b]">
+              불러오는 중...
+            </p>
+          ) : sortedRows.length === 0 ? (
+            <p className="rounded-2xl bg-[#f5f5f7] px-3 py-6 text-center text-[13px] text-[#86868b]">
+              등록된 정기 지출이 없습니다.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {sortedRows.map((row) => (
+                <li
+                  key={row.id}
+                  className="rounded-2xl bg-[#f5f5f7] px-3 py-2.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-[14px] font-medium text-[#1d1d1f]">
+                        {row.description}
+                      </p>
+                      <p className="text-[11px] text-[#86868b]">
+                        {row.start_date} · {row.interval_months}개월마다 ·{" "}
+                        {row.category}_{row.subcategory}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-[14px] font-medium tabular-nums text-[#1d1d1f]">
+                      {formatAmount(row.amount)}원
+                    </p>
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => startEdit(row)}
+                      className="rounded-xl bg-white px-3 py-1.5 text-[12px] font-medium text-[#1d1d1f] ring-1 ring-black/5 disabled:opacity-40"
+                    >
+                      수정
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `"${row.description}" 정기 지출을 삭제할까요? (이미 저장된 지출은 그대로 둡니다)`,
+                          )
+                        ) {
+                          void onDelete(row.id);
+                        }
+                      }}
+                      className="rounded-xl bg-white px-3 py-1.5 text-[12px] font-medium text-[#b42318] ring-1 ring-black/5 disabled:opacity-40"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* 추가·수정: 화면 가운데 모달 (목록 스크롤과 무관하게 보임) */}
+      {showForm && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4"
+          role="presentation"
+          onClick={() => {
+            if (!busy) resetForm();
+          }}
+        >
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="recurring-form-title"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => void handleSubmit(e)}
+            className="max-h-[85dvh] w-full max-w-sm overflow-y-auto rounded-3xl bg-white p-4 shadow-[0_16px_48px_rgba(0,0,0,0.28)]"
+          >
+            <p
+              id="recurring-form-title"
+              className="mb-3 text-[15px] font-semibold text-[#1d1d1f]"
             >
-              <p className="text-[13px] font-medium text-[#1d1d1f]">
-                {editingId ? "정기 지출 수정" : "정기 지출 추가"}
-              </p>
+              {editingId ? "정기 지출 수정" : "정기 지출 추가"}
+            </p>
+            <div className="space-y-2.5">
               <input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="내용 (예: 넷플릭스)"
                 className={fieldClass}
                 disabled={busy}
+                autoFocus
               />
               <input
                 type="number"
@@ -288,88 +402,10 @@ export function RecurringExpenseSheet({
                   {busy ? "저장 중..." : "저장"}
                 </button>
               </div>
-            </form>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowForm(true)}
-              className="mb-3 w-full rounded-2xl bg-[#1d1d1f] py-2.5 text-[14px] font-medium text-white"
-            >
-              정기 지출 추가
-            </button>
-          )}
-
-          <div className="mb-4 flex items-center justify-between rounded-2xl bg-[#f5f5f7] px-3.5 py-2.5">
-            <p className="text-[13px] font-medium text-[#86868b]">총 합계</p>
-            <p className="text-[15px] font-semibold tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
-              {formatAmount(totalAmount)}
-              <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
-                원
-              </span>
-            </p>
-          </div>
-
-          {loading ? (
-            <p className="py-8 text-center text-[13px] text-[#86868b]">
-              불러오는 중...
-            </p>
-          ) : sortedRows.length === 0 ? (
-            <p className="rounded-2xl bg-[#f5f5f7] px-3 py-6 text-center text-[13px] text-[#86868b]">
-              등록된 정기 지출이 없습니다.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {sortedRows.map((row) => (
-                <li
-                  key={row.id}
-                  className="rounded-2xl bg-[#f5f5f7] px-3 py-2.5"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-[14px] font-medium text-[#1d1d1f]">
-                        {row.description}
-                      </p>
-                      <p className="text-[11px] text-[#86868b]">
-                        {row.start_date} · {row.interval_months}개월마다 ·{" "}
-                        {row.category}_{row.subcategory}
-                      </p>
-                    </div>
-                    <p className="shrink-0 text-[14px] font-medium tabular-nums text-[#1d1d1f]">
-                      {formatAmount(row.amount)}원
-                    </p>
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => startEdit(row)}
-                      className="rounded-xl bg-white px-3 py-1.5 text-[12px] font-medium text-[#1d1d1f] ring-1 ring-black/5 disabled:opacity-40"
-                    >
-                      수정
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `"${row.description}" 정기 지출을 삭제할까요? (이미 저장된 지출은 그대로 둡니다)`,
-                          )
-                        ) {
-                          void onDelete(row.id);
-                        }
-                      }}
-                      className="rounded-xl bg-white px-3 py-1.5 text-[12px] font-medium text-[#b42318] ring-1 ring-black/5 disabled:opacity-40"
-                    >
-                      삭제
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+            </div>
+          </form>
         </div>
-      </div>
+      )}
     </div>
   );
 }
