@@ -2200,6 +2200,11 @@ export default function Home() {
                 !editingMessageId &&
                 contextMessageId === message.id &&
                 message.id !== "welcome";
+              // expenseId가 없더라도 「저장했어요」 안내면 저장된 지출로 본다
+              const isSavedExpenseChat =
+                Boolean(message.expenseId) ||
+                (message.role === "assistant" &&
+                  message.content.includes("저장했어요"));
               const isEditing =
                 !chatSelectMode && editingMessageId === message.id;
               const bubbleClass = `whitespace-pre-wrap break-words rounded-2xl px-3.5 py-1 text-left text-[15px] leading-[20px] transition-shadow select-none ${
@@ -2312,8 +2317,8 @@ export default function Home() {
                   )}
                   {showActions && (
                     <div className="flex flex-wrap gap-2">
-                      {/* 저장된 지출(expenseId)은 복사·수정 없이 삭제만 */}
-                      {!message.expenseId && (
+                      {/* 저장된 지출 안내는 복사·수정 없이 삭제만 */}
+                      {!isSavedExpenseChat && (
                         <>
                           <button
                             type="button"
