@@ -99,7 +99,7 @@ export function ManualExpenseForm({
       className="mx-auto w-full max-w-md space-y-3 px-4 py-4"
     >
       <p className="px-1 text-[13px] text-[#86868b]">
-        날짜·내용·금액·분류를 직접 입력해 저장합니다.
+        날짜·금액·내용·분류를 직접 입력해 저장합니다.
       </p>
 
       <label className="block">
@@ -115,17 +115,6 @@ export function ManualExpenseForm({
       </label>
 
       <label className="block">
-        <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">내용</span>
-        <input
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="내용 (예: 넷플릭스)"
-          className={fieldClass}
-          disabled={busy}
-        />
-      </label>
-
-      <label className="block">
         <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">금액</span>
         <input
           type="number"
@@ -135,6 +124,17 @@ export function ManualExpenseForm({
           onChange={(e) => setAmount(e.target.value)}
           placeholder="예: 10000"
           className={`${fieldClass} tabular-nums [font-feature-settings:'zero'_0]`}
+          disabled={busy}
+        />
+      </label>
+
+      <label className="block">
+        <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">내용</span>
+        <input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="내용 (예: 넷플릭스)"
+          className={fieldClass}
           disabled={busy}
         />
       </label>
