@@ -31,16 +31,3 @@ export function downloadExpensesExcel(expenses: ExcelExpenseRow[]) {
   const stamp = koreaToday();
   XLSX.writeFile(workbook, `가계부_${stamp}.xlsx`);
 }
-
-/** Gmail 첨부용 base64 (표준) */
-export function expensesToExcelBase64(expenses: ExcelExpenseRow[]) {
-  const workbook = expensesToWorkbook(expenses);
-  const buffer = XLSX.write(workbook, {
-    type: "base64",
-    bookType: "xlsx",
-  }) as string;
-  return {
-    fileName: `가계부_${koreaToday()}.xlsx`,
-    base64: buffer,
-  };
-}

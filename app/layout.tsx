@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/components/AuthProvider";
-import { GoogleProvider } from "@/components/GoogleProvider";
 import { PwaRegister } from "@/components/PwaRegister";
 import "./globals.css";
 
@@ -51,12 +50,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-dvh overflow-hidden antialiased`}
     >
       <body className="flex h-dvh min-h-0 flex-col overflow-hidden font-sans">
-        <GoogleProvider>
-          <AuthProvider>
-            <PwaRegister />
-            {children}
-          </AuthProvider>
-        </GoogleProvider>
+        <AuthProvider>
+          <PwaRegister />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

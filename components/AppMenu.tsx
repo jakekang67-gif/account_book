@@ -1,19 +1,10 @@
 "use client";
 
-import { useGoogleLogin } from "@react-oauth/google";
 import { useEffect, useRef, useState } from "react";
 import {
   downloadExpensesExcel,
-  expensesToExcelBase64,
   type ExcelExpenseRow,
 } from "@/lib/excel";
-import {
-  clearGoogleSession,
-  ensureFreshGoogleSession,
-  loadGoogleSession,
-  saveGoogleSession,
-  type GoogleSession,
-} from "@/lib/googleSession";
 
 type AppMenuProps = {
   expenses: ExcelExpenseRow[];
@@ -43,204 +34,14 @@ export function AppMenu({
   accountEmail,
   onSignOut,
 }: AppMenuProps) {
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-  if (!clientId) {
-    return (
-      <MenuPanel
-        expenses={expenses}
-        googleEnabled={false}
-        onOpenCategoryEditor={onOpenCategoryEditor}
-        onOpenBudgetList={onOpenBudgetList}
-        onOpenMonthSummary={onOpenMonthSummary}
-        onOpenRecurring={onOpenRecurring}
-        onOpenInstallHelp={onOpenInstallHelp}
-        onOpenChatCleanup={onOpenChatCleanup}
-        onOpenChatNotice={onOpenChatNotice}
-        onOpenChange={onOpenChange}
-        accountEmail={accountEmail}
-        onSignOut={onSignOut}
-      />
-    );
-  }
-  return (
-    <MenuWithGoogle
-      expenses={expenses}
-      onOpenCategoryEditor={onOpenCategoryEditor}
-      onOpenBudgetList={onOpenBudgetList}
-      onOpenMonthSummary={onOpenMonthSummary}
-      onOpenRecurring={onOpenRecurring}
-      onOpenInstallHelp={onOpenInstallHelp}
-      onOpenChatCleanup={onOpenChatCleanup}
-      onOpenChatNotice={onOpenChatNotice}
-      onOpenChange={onOpenChange}
-      accountEmail={accountEmail}
-      onSignOut={onSignOut}
-    />
-  );
-}
-
-function MenuWithGoogle({
-  expenses,
-  onOpenCategoryEditor,
-  onOpenBudgetList,
-  onOpenMonthSummary,
-  onOpenRecurring,
-  onOpenInstallHelp,
-  onOpenChatCleanup,
-  onOpenChatNotice,
-  onOpenChange,
-  accountEmail,
-  onSignOut,
-}: AppMenuProps) {
-  const [session, setSession] = useState<GoogleSession | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    setSession(loadGoogleSession());
-  }, []);
-
-  // auth-code + 서버 교환으로 refresh token까지 받아 오래 유지
-  // prompt/access_type은 GIS 타입에 없어 단언으로 전달
-  const login = useGoogleLogin({
-    flow: "auth-code",
-    ux_mode: "popup",
-    select_account: true,
-    scope:
-      "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email",
-    prompt: "consent",
-    access_type: "offline",
-    onSuccess: async (codeResponse: { code?: string }) => {
-      setBusy(true);
-      setStatus(null);
-      try {
-        const code = codeResponse.code;
-        if (!code) {
-          throw new Error("구글 인가 코드를 받지 못했습니다.");
-        }
-        const response = await fetch("/api/google/oauth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "exchange", code }),
-        });
-        const data = (await response.json()) as {
-          accessToken?: string;
-          refreshToken?: string | null;
-          expiresIn?: number;
-          email?: string;
-          error?: string;
-        };
-        if (!response.ok || !data.accessToken || !data.email) {
-          throw new Error(data.error ?? "구글 토큰 교환에 실패했습니다.");
-        }
-        const prev = loadGoogleSession();
-        const next: GoogleSession = {
-          accessToken: data.accessToken,
-          email: data.email,
-          refreshToken: data.refreshToken || prev?.refreshToken || null,
-          expiresAt: data.expiresIn
-            ? Date.now() + data.expiresIn * 1000
-            : Date.now() + 3500 * 1000,
-        };
-        if (!next.refreshToken) {
-          setStatus(
-            `연결됨: ${data.email} (장기 유지 토큰 없음 · 다시 「구글 계정 연결」을 눌러 주세요)`,
-          );
-        } else {
-          setStatus(`연결됨: ${data.email} (자동 갱신 사용)`);
-        }
-        saveGoogleSession(next);
-        setSession(next);
-      } catch (error) {
-        setStatus(
-          error instanceof Error ? error.message : "구글 연결에 실패했습니다.",
-        );
-      } finally {
-        setBusy(false);
-      }
-    },
-    onError: () => setStatus("구글 로그인에 실패했습니다."),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any);
-
-  return (
-    <MenuPanel
-      expenses={expenses}
-      googleEnabled
-      session={session}
-      status={status}
-      busy={busy}
-      setStatus={setStatus}
-      setBusy={setBusy}
-      setSession={setSession}
-      onConnectGoogle={() => login()}
-      onOpenCategoryEditor={onOpenCategoryEditor}
-      onOpenBudgetList={onOpenBudgetList}
-      onOpenMonthSummary={onOpenMonthSummary}
-      onOpenRecurring={onOpenRecurring}
-      onOpenInstallHelp={onOpenInstallHelp}
-      onOpenChatCleanup={onOpenChatCleanup}
-      onOpenChatNotice={onOpenChatNotice}
-      onOpenChange={onOpenChange}
-      accountEmail={accountEmail}
-      onSignOut={onSignOut}
-    />
-  );
-}
-
-function MenuPanel({
-  expenses,
-  googleEnabled,
-  session: sessionProp,
-  status: statusProp,
-  busy: busyProp,
-  setStatus: setStatusProp,
-  setBusy: setBusyProp,
-  setSession: setSessionProp,
-  onConnectGoogle,
-  onOpenCategoryEditor,
-  onOpenBudgetList,
-  onOpenMonthSummary,
-  onOpenRecurring,
-  onOpenInstallHelp,
-  onOpenChatCleanup,
-  onOpenChatNotice,
-  onOpenChange,
-  accountEmail,
-  onSignOut,
-}: AppMenuProps & {
-  googleEnabled: boolean;
-  session?: GoogleSession | null;
-  status?: string | null;
-  busy?: boolean;
-  setStatus?: (value: string | null) => void;
-  setBusy?: (value: boolean) => void;
-  setSession?: (value: GoogleSession | null) => void;
-  onConnectGoogle?: () => void;
-}) {
   const [open, setOpen] = useState(false);
-  const [localSession, setLocalSession] = useState<GoogleSession | null>(null);
-  const [localStatus, setLocalStatus] = useState<string | null>(null);
-  const [localBusy, setLocalBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  const session = sessionProp ?? localSession;
-  const status = statusProp ?? localStatus;
-  const busy = busyProp ?? localBusy;
-  const setStatus = setStatusProp ?? setLocalStatus;
-  const setBusy = setBusyProp ?? setLocalBusy;
-  const setSession = setSessionProp ?? setLocalSession;
 
   function setMenuOpen(next: boolean) {
     setOpen(next);
     onOpenChange?.(next);
   }
-
-  useEffect(() => {
-    if (sessionProp === undefined) {
-      setLocalSession(loadGoogleSession());
-    }
-  }, [sessionProp]);
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
@@ -264,101 +65,6 @@ function MenuPanel({
     setMenuOpen(false);
   }
 
-  async function handleSendMail() {
-    if (expenses.length === 0) {
-      setStatus("보낼 지출 내역이 없습니다.");
-      return;
-    }
-    if (!session) {
-      setStatus(
-        "먼저 메뉴에서 「구글 계정 연결」을 해주세요. 연결이 오래되면 다시 연결해야 메일이 갑니다.",
-      );
-      return;
-    }
-
-    setBusy(true);
-    setStatus("메일 보내는 중...");
-    try {
-      const fresh = await ensureFreshGoogleSession();
-      if (!fresh.session) {
-        clearGoogleSession();
-        setSession(null);
-        throw new Error(
-          fresh.error ??
-            "구글 연결이 만료됐어요. 메뉴에서 「구글 계정 연결」을 다시 해주세요.",
-        );
-      }
-      setSession(fresh.session);
-
-      const file = expensesToExcelBase64(expenses);
-      const response = await fetch("/api/export/gmail", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accessToken: fresh.session.accessToken,
-          to: fresh.session.email,
-          fileName: file.fileName,
-          fileBase64: file.base64,
-        }),
-      });
-      const data = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        if (response.status === 401) {
-          // 401이면 만료로 보고 강제 refresh 후 재시도
-          const retried = await ensureFreshGoogleSession({ force: true });
-          if (retried.session?.refreshToken) {
-            const retryRes = await fetch("/api/export/gmail", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                accessToken: retried.session.accessToken,
-                to: retried.session.email,
-                fileName: file.fileName,
-                fileBase64: file.base64,
-              }),
-            });
-            if (retryRes.ok) {
-              setSession(retried.session);
-              setStatus(`${retried.session.email}로 메일을 보냈습니다.`);
-              setMenuOpen(false);
-              return;
-            }
-          }
-          clearGoogleSession();
-          setSession(null);
-          throw new Error(
-            "구글 연결이 만료됐어요. 메뉴에서 「구글 계정 연결」을 다시 해주세요.",
-          );
-        }
-        throw new Error(data.error ?? "메일 발송에 실패했습니다.");
-      }
-      setStatus(`${fresh.session.email}로 메일을 보냈습니다.`);
-      setMenuOpen(false);
-    } catch (error) {
-      setStatus(
-        error instanceof Error ? error.message : "메일 발송에 실패했습니다.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function handleConnect() {
-    if (!googleEnabled || !onConnectGoogle) {
-      setStatus(
-        ".env.local에 NEXT_PUBLIC_GOOGLE_CLIENT_ID를 넣고 서버를 재시작해 주세요.",
-      );
-      return;
-    }
-    onConnectGoogle();
-  }
-
-  function handleDisconnect() {
-    clearGoogleSession();
-    setSession(null);
-    setStatus("구글 계정 연결을 해제했습니다.");
-  }
-
   return (
     <div className="relative z-[110]" ref={menuRef}>
       <button
@@ -378,17 +84,13 @@ function MenuPanel({
                 ? `로그인: ${accountEmail}`
                 : "가계부 미로그인"}
             </p>
-            <p className="mt-0.5 text-[11px] text-[#aeaeb2]">
-              {session ? `Gmail: ${session.email}` : "구글 메일 미연결"}
-            </p>
           </div>
           <ul className="py-1">
             <li>
               <button
                 type="button"
-                disabled={busy}
                 onClick={handleDownload}
-                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
+                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
               >
                 엑셀 다운로드
               </button>
@@ -396,22 +98,11 @@ function MenuPanel({
             <li>
               <button
                 type="button"
-                disabled={busy}
-                onClick={() => void handleSendMail()}
-                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
-              >
-                메일로 보내기
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                disabled={busy}
                 onClick={() => {
                   setMenuOpen(false);
                   onOpenMonthSummary?.();
                 }}
-                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
+                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
               >
                 이번 달 수입·지출
               </button>
@@ -419,12 +110,11 @@ function MenuPanel({
             <li>
               <button
                 type="button"
-                disabled={busy}
                 onClick={() => {
                   setMenuOpen(false);
                   onOpenRecurring?.();
                 }}
-                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
+                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
               >
                 정기 지출
               </button>
@@ -432,12 +122,11 @@ function MenuPanel({
             <li>
               <button
                 type="button"
-                disabled={busy}
                 onClick={() => {
                   setMenuOpen(false);
                   onOpenBudgetList?.();
                 }}
-                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
+                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
               >
                 월 예산 목록
               </button>
@@ -445,12 +134,11 @@ function MenuPanel({
             <li>
               <button
                 type="button"
-                disabled={busy}
                 onClick={() => {
                   setMenuOpen(false);
                   onOpenChatNotice?.();
                 }}
-                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
+                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
               >
                 안내 다시 보기
               </button>
@@ -458,12 +146,11 @@ function MenuPanel({
             <li>
               <button
                 type="button"
-                disabled={busy}
                 onClick={() => {
                   setMenuOpen(false);
                   onOpenChatCleanup?.();
                 }}
-                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
+                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
               >
                 채팅 삭제
               </button>
@@ -471,12 +158,11 @@ function MenuPanel({
             <li>
               <button
                 type="button"
-                disabled={busy}
                 onClick={() => {
                   setMenuOpen(false);
                   onOpenInstallHelp?.();
                 }}
-                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
+                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
               >
                 홈화면에 추가 안내
               </button>
@@ -484,47 +170,24 @@ function MenuPanel({
             <li>
               <button
                 type="button"
-                disabled={busy}
                 onClick={() => {
                   setMenuOpen(false);
                   onOpenCategoryEditor?.();
                 }}
-                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
+                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
               >
                 카테고리 편집
               </button>
-            </li>
-            <li>
-              {session ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={handleDisconnect}
-                  className="w-full px-3 py-2.5 text-left text-[14px] text-[#b42318] hover:bg-[#f5f5f7] disabled:opacity-40"
-                >
-                  구글 계정 연결 해제
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={handleConnect}
-                  className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-40"
-                >
-                  구글 계정 연결
-                </button>
-              )}
             </li>
             {onSignOut && (
               <li>
                 <button
                   type="button"
-                  disabled={busy}
                   onClick={() => {
                     setMenuOpen(false);
                     onSignOut();
                   }}
-                  className="w-full px-3 py-2.5 text-left text-[14px] text-[#b42318] hover:bg-[#f5f5f7] disabled:opacity-40"
+                  className="w-full px-3 py-2.5 text-left text-[14px] text-[#b42318] hover:bg-[#f5f5f7]"
                 >
                   로그아웃
                 </button>
