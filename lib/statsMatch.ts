@@ -1,10 +1,23 @@
 import type { CategoryTree } from "@/lib/categories";
+import { hasExpenseAmount } from "@/lib/chatIntent";
 
 export type StatsCandidate = {
   category: string;
   subcategory: string | null;
   label: string;
 };
+
+/** 총지출·합계처럼 분류 확인 없이 바로 답할 질문 */
+export function looksLikeTotalExpenseQuestion(text: string) {
+  const t = text.trim();
+  if (!t || hasExpenseAmount(t)) return false;
+  const compact = t.replace(/\s+/g, "");
+  return (
+    /(총\s*지출|지출\s*합계|합계|총액|전체\s*지출)/.test(t) ||
+    /(이번|저번|지난)\s*달\s*(총\s*)?(지출|합계|얼마)/.test(t) ||
+    /^(이번달|저번달|지난달)?(총)?(지출|합계|얼마)/.test(compact)
+  );
+}
 
 function norm(s: string) {
   return s.trim().toLowerCase().replace(/\s+/g, "");

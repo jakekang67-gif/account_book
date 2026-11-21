@@ -1,7 +1,13 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { AppLockScreen } from "@/components/AppLockScreen";
 import { AppMenu } from "@/components/AppMenu";
+import {
+  hasAppLockPin,
+  isAppLockUnlocked,
+  lockAppNow,
+} from "@/lib/appLock";
 import { MonthIncomeExpenseSheet } from "@/components/MonthIncomeExpenseSheet";
 import { useAuth } from "@/components/AuthProvider";
 import { BudgetEditor } from "@/components/BudgetEditor";
@@ -80,6 +86,7 @@ import {
 import {
   findStatsCandidates,
   formatStatsConfirmQuestion,
+  looksLikeTotalExpenseQuestion,
   pickStatsCandidate,
   type StatsCandidate,
 } from "@/lib/statsMatch";
@@ -405,6 +412,11 @@ export default function Home() {
     StatsCandidate[]
   >([]);
   const [manualSaveBusy, setManualSaveBusy] = useState(false);
+  /** null: 확인 전, setup/unlock: 잠금 화면, null unlocked after check via unlocked flag */
+  const [appLockMode, setAppLockMode] = useState<"setup" | "unlock" | null>(
+    null,
+  );
+  const [appLockChecked, setAppLockChecked] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [budgetEditorOpen, setBudgetEditorOpen] = useState(false);
   const [editingBudgetMonth, setEditingBudgetMonth] = useState("");
@@ -782,6 +794,14 @@ export default function Home() {
     loadingExpenses,
   ]);
 
+  function scrollChatToBottom(behavior: ScrollBehavior = "smooth") {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior });
+    });
+  }
+
   useEffect(() => {
     const onlyWelcome =
       messages.length === 1 && messages[0]?.id === "welcome" && !sending;
@@ -790,8 +810,38 @@ export default function Home() {
       return;
     }
     if (contextMessageId) return;
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    scrollChatToBottom(sending ? "auto" : "smooth");
   }, [messages, sending, contextMessageId]);
+
+  // 모바일 키보드가 올라와도 최신 대화가 보이게
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => {
+      if (document.activeElement === inputRef.current) {
+        scrollChatToBottom("auto");
+      }
+    };
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
+  }, []);
+
+  // 로그인 후 앱 잠금 여부 확인
+  useEffect(() => {
+    if (!user) {
+      setAppLockChecked(false);
+      setAppLockMode(null);
+      return;
+    }
+    if (!hasAppLockPin()) {
+      setAppLockMode("setup");
+    } else if (!isAppLockUnlocked()) {
+      setAppLockMode("unlock");
+    } else {
+      setAppLockMode(null);
+    }
+    setAppLockChecked(true);
+  }, [user?.id]);
 
   // 길게 누르기 메뉴가 잘리지 않도록 해당 말풍선까지 스크롤
   useEffect(() => {
@@ -1608,6 +1658,9 @@ export default function Home() {
     const text = (overrideText ?? input).trim();
     if (!text || sending) return;
 
+    /** 저장 확인처럼 바로 답을 쳐야 할 때만 키보드 유지 */
+    let keepKeyboardOpen = false;
+
     const alreadyAppended = skipNextUserAppendRef.current;
     skipNextUserAppendRef.current = false;
 
@@ -1704,6 +1757,7 @@ export default function Home() {
 
         const picked = pickStatsCandidate(text, pendingStatsCandidates);
         if (!picked) {
+          keepKeyboardOpen = true;
           pushAssistant(formatStatsConfirmQuestion(pendingStatsCandidates));
           return;
         }
@@ -1882,7 +1936,17 @@ export default function Home() {
           currentMonth || koreaToday().slice(0, 7),
         );
         const candidates = findStatsCandidates(text, categoryTree);
+
+        // 총지출·합계 질문은 확인 없이 바로 답변
+        if (candidates.length === 0 && looksLikeTotalExpenseQuestion(text)) {
+          const today = todayMax || koreaToday();
+          const rows = expenses.filter((item) => item.date <= today);
+          pushAssistant(formatStatsBreakdownReply(rows, monthKey));
+          return;
+        }
+
         if (candidates.length === 0) {
+          keepKeyboardOpen = true;
           setPendingPhase("await_stats_confirm");
           setPendingStatsMonth(monthKey);
           setPendingStatsCandidates([]);
@@ -1890,7 +1954,8 @@ export default function Home() {
           return;
         }
 
-        // 후보를 확인받은 뒤에만 금액을 답함 (전체 목록 무단 표시 방지)
+        // 분류별 질문은 확인 후 금액 답변
+        keepKeyboardOpen = true;
         setPendingPhase("await_stats_confirm");
         setPendingStatsMonth(monthKey);
         setPendingStatsCandidates(candidates);
@@ -1931,6 +1996,7 @@ export default function Home() {
           subcategory: data.expense.subcategory,
           sourceMessageId,
         };
+        keepKeyboardOpen = true;
         setPendingExpense(next);
         setPendingPhase("confirm");
         pushAssistant(formatAskConfirmReply(next));
@@ -1964,7 +2030,12 @@ export default function Home() {
       if (!pageLeavingRef.current) {
         preserveSendingDraftRef.current = false;
       }
-      inputRef.current?.focus();
+      if (keepKeyboardOpen) {
+        inputRef.current?.focus();
+      } else {
+        inputRef.current?.blur();
+        scrollChatToBottom("smooth");
+      }
     }
   }
 
@@ -2081,6 +2152,23 @@ export default function Home() {
     return <LoginForm />;
   }
 
+  if (!appLockChecked) {
+    return (
+      <div className="flex min-h-[100dvh] flex-1 items-center justify-center bg-[#f5f5f7] text-[14px] text-[#86868b]">
+        불러오는 중...
+      </div>
+    );
+  }
+
+  if (appLockMode) {
+    return (
+      <AppLockScreen
+        mode={appLockMode}
+        onUnlocked={() => setAppLockMode(null)}
+      />
+    );
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[#f5f5f7]">
       {/* PWA/모바일: 화면 높이를 고정해 하단 전송·탭이 잘리지 않게 함 */}
@@ -2107,9 +2195,17 @@ export default function Home() {
                 setChatSelectMode(false);
                 setChatNoticeShowRequestId((n) => n + 1);
               }}
+              onOpenAppLock={() => setAppLockMode("setup")}
+              onLockNow={() => {
+                lockAppNow();
+                setAppLockMode("unlock");
+              }}
               onOpenChange={setAppMenuOpen}
               accountEmail={user.email}
-              onSignOut={() => void signOut()}
+              onSignOut={() => {
+                lockAppNow();
+                void signOut();
+              }}
             />
           </div>
         </header>
@@ -2442,7 +2538,7 @@ export default function Home() {
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="오늘 커피 5000원"
+                  placeholder="예:오늘 커피 5000원"
                   disabled={sending}
                   className="min-h-9 min-w-0 w-full rounded-2xl bg-[#f5f5f7] px-3 py-1.5 text-[14px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed] disabled:opacity-60 sm:px-4"
                 />
