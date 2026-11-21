@@ -151,16 +151,44 @@ export function collectRecurringReminders(
   });
 }
 
+const NOTIFICATION_ASKED_KEY = "account_book_notification_permission_asked_v1";
+
+function wasNotificationPermissionAsked() {
+  try {
+    return window.localStorage.getItem(NOTIFICATION_ASKED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markNotificationPermissionAsked() {
+  try {
+    window.localStorage.setItem(NOTIFICATION_ASKED_KEY, "1");
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * 알림 권한 확인.
+ * requestPermission 대화상자는 앱 기준으로 처음 한 번만 띄웁니다.
+ */
 export async function ensureNotificationPermission(): Promise<boolean> {
   if (typeof window === "undefined" || !("Notification" in window)) {
     return false;
   }
   if (Notification.permission === "granted") return true;
   if (Notification.permission === "denied") return false;
+
+  // default: 이미 한 번 물어봤으면 다시 묻지 않음
+  if (wasNotificationPermissionAsked()) return false;
+
   try {
+    markNotificationPermissionAsked();
     const result = await Notification.requestPermission();
     return result === "granted";
   } catch {
+    markNotificationPermissionAsked();
     return false;
   }
 }

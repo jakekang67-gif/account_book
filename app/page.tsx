@@ -666,20 +666,6 @@ export default function Home() {
     resumeSendText,
   ]);
 
-  // 로그인 직후 알림 권한을 미리 요청 (안내할 정기 지출이 없어도)
-  useEffect(() => {
-    if (!user?.id) return;
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      if (cancelled || !chatDraftReadyRef.current) return;
-      void ensureNotificationPermission();
-    }, 1200);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [user?.id]);
-
   // 정기 지출: 전날·당일 오전 10시 이후 대화창 + 시스템 알림
   useEffect(() => {
     if (!user?.id) return;
@@ -695,6 +681,7 @@ export default function Home() {
       const due = collectRecurringReminders(rows);
       if (due.length === 0) return;
 
+      // 이미 허용된 경우만 시스템 알림 (권한 창은 정기 지출 메뉴에서 한 번만)
       await ensureNotificationPermission();
       if (cancelled) return;
 
