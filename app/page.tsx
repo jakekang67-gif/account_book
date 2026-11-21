@@ -436,31 +436,40 @@ export default function Home() {
     return categoryTree[editForm.category] ?? [];
   }, [editForm, categoryTree]);
 
+  // 빌드 사전 렌더에서 new Date()를 쓰지 않도록, 마운트 후에만 오늘/이번 달 설정
+  const [currentMonth, setCurrentMonth] = useState("");
+  const [todayMax, setTodayMax] = useState("");
+
+  // 아직 오지 않은 날짜(미리 들어간 정기 지출 등)는 모든 합계·차트에서 제외
+  const occurredExpenses = useMemo(() => {
+    if (!todayMax) return expenses;
+    return expenses.filter((item) => item.date <= todayMax);
+  }, [expenses, todayMax]);
+
   const monthlyTotals = useMemo(
-    () => summarizeByMonth(expenses),
-    [expenses],
+    () => summarizeByMonth(occurredExpenses),
+    [occurredExpenses],
   );
 
-  const availableMonths = useMemo(() => listMonths(expenses), [expenses]);
+  const availableMonths = useMemo(
+    () => listMonths(occurredExpenses),
+    [occurredExpenses],
+  );
 
   const categoryTotals = useMemo(() => {
     if (!reportMonth) return [];
-    return summarizeByCategory(expenses, reportMonth);
-  }, [expenses, reportMonth]);
+    return summarizeByCategory(occurredExpenses, reportMonth);
+  }, [occurredExpenses, reportMonth]);
 
   const categoryMonthTotal = useMemo(
     () => categoryTotals.reduce((sum, row) => sum + row.total, 0),
     [categoryTotals],
   );
 
-  // 빌드 사전 렌더에서 new Date()를 쓰지 않도록, 마운트 후에만 오늘/이번 달 설정
-  const [currentMonth, setCurrentMonth] = useState("");
-  const [todayMax, setTodayMax] = useState("");
-
   const thisMonthSpent = useMemo(
     () =>
       currentMonth
-        ? expenses
+        ? occurredExpenses
             .filter(
               (item) =>
                 monthKeyFromDate(item.date) === currentMonth &&
@@ -468,15 +477,15 @@ export default function Home() {
             )
             .reduce((sum, item) => sum + item.amount, 0)
         : 0,
-    [expenses, currentMonth],
+    [occurredExpenses, currentMonth],
   );
 
   const totalExpenseAll = useMemo(
     () =>
-      expenses
+      occurredExpenses
         .filter((item) => item.category !== "수입")
         .reduce((sum, item) => sum + item.amount, 0),
-    [expenses],
+    [occurredExpenses],
   );
 
   const totalIncomeAll = useMemo(() => {
@@ -488,8 +497,12 @@ export default function Home() {
 
   const categorySubTotals = useMemo(() => {
     if (!reportMonth || !expandedCategory) return [];
-    return summarizeBySubcategory(expenses, reportMonth, expandedCategory);
-  }, [expenses, reportMonth, expandedCategory]);
+    return summarizeBySubcategory(
+      occurredExpenses,
+      reportMonth,
+      expandedCategory,
+    );
+  }, [occurredExpenses, reportMonth, expandedCategory]);
 
   useEffect(() => {
     const today = koreaToday();
@@ -2017,12 +2030,6 @@ export default function Home() {
       ? "서버가 바빠서 다른 경로로 시도 중이에요. 조금만 더 기다려 주세요..."
       : "생각 중이에요. 보통 몇 초면 답해요...";
 
-  // 아직 오지 않은 날짜(미리 들어간 정기 지출 등)는 합계·구매 내역에서 제외
-  const occurredExpenses = useMemo(() => {
-    if (!todayMax) return expenses;
-    return expenses.filter((item) => item.date <= todayMax);
-  }, [expenses, todayMax]);
-
   const total = occurredExpenses.reduce((sum, item) => sum + item.amount, 0);
 
   const tabTitle =
@@ -2575,7 +2582,7 @@ export default function Home() {
                                 {(categorySubTotals.length > 0
                                   ? categorySubTotals
                                   : summarizeBySubcategory(
-                                      expenses,
+                                      occurredExpenses,
                                       reportMonth,
                                       row.category,
                                     )
