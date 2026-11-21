@@ -14,9 +14,9 @@ export function expensesToWorkbook(expenses: ExcelExpenseRow[]) {
   const rows = expenses.map((item) => ({
     날짜: item.date,
     금액: item.amount,
-    내용: item.description,
     대분류: item.category ?? "",
     소분류: item.subcategory ?? "",
+    내용: item.description,
   }));
 
   const worksheet = XLSX.utils.json_to_sheet(rows);
