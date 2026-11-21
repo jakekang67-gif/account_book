@@ -25,8 +25,6 @@ type RecurringExpenseSheetProps = {
   onDelete: (id: number) => Promise<string | null>;
 };
 
-const INTERVALS = [1, 2, 3, 6, 12] as const;
-
 function formatAmount(n: number) {
   return new Intl.NumberFormat("ko-KR").format(n);
 }
@@ -57,7 +55,7 @@ export function RecurringExpenseSheet({
   const [subcategory, setSubcategory] = useState(
     (categoryTree[defaultCategory] ?? ["기타"])[0] ?? "기타",
   );
-  const [intervalMonths, setIntervalMonths] = useState(1);
+  const [intervalMonths, setIntervalMonths] = useState("1");
   const [startDate, setStartDate] = useState(koreaToday());
   const [formError, setFormError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -81,7 +79,7 @@ export function RecurringExpenseSheet({
     setAmount("");
     setCategory(defaultCategory);
     setSubcategory((categoryTree[defaultCategory] ?? ["기타"])[0] ?? "기타");
-    setIntervalMonths(1);
+    setIntervalMonths("1");
     setStartDate(koreaToday());
     setFormError(null);
     setShowForm(false);
@@ -93,7 +91,7 @@ export function RecurringExpenseSheet({
     setAmount(String(row.amount));
     setCategory(row.category);
     setSubcategory(row.subcategory);
-    setIntervalMonths(row.interval_months);
+    setIntervalMonths(String(row.interval_months));
     setStartDate(row.start_date);
     setShowForm(true);
     setFormError(null);
@@ -102,6 +100,7 @@ export function RecurringExpenseSheet({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const n = Number(amount.replace(/,/g, ""));
+    const interval = Number(intervalMonths.replace(/,/g, ""));
     if (!description.trim()) {
       setFormError("내용을 입력해 주세요.");
       return;
@@ -110,13 +109,17 @@ export function RecurringExpenseSheet({
       setFormError("금액을 확인해 주세요.");
       return;
     }
+    if (!Number.isFinite(interval) || interval < 1 || interval > 60) {
+      setFormError("주기는 1~60개월 숫자로 입력해 주세요.");
+      return;
+    }
     const err = await onSave({
       id: editingId ?? undefined,
       description: description.trim(),
       amount: n,
       category,
       subcategory,
-      interval_months: intervalMonths,
+      interval_months: Math.round(interval),
       start_date: startDate,
     });
     if (err) {
@@ -278,20 +281,24 @@ export function RecurringExpenseSheet({
               </select>
               <label className="block">
                 <span className="mb-1 block text-[12px] text-[#86868b]">
-                  주기 (개월)
+                  주기 (개월 수 직접 입력)
                 </span>
-                <select
-                  value={intervalMonths}
-                  onChange={(e) => setIntervalMonths(Number(e.target.value))}
-                  className={fieldClass}
-                  disabled={busy}
-                >
-                  {INTERVALS.map((n) => (
-                    <option key={n} value={n}>
-                      {n}개월마다
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={60}
+                    value={intervalMonths}
+                    onChange={(e) => setIntervalMonths(e.target.value)}
+                    placeholder="예: 1"
+                    className={fieldClass}
+                    disabled={busy}
+                  />
+                  <span className="shrink-0 text-[13px] text-[#86868b]">
+                    개월마다
+                  </span>
+                </div>
               </label>
               <label className="block">
                 <span className="mb-1 block text-[12px] text-[#86868b]">
