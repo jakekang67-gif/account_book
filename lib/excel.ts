@@ -25,9 +25,11 @@ export function expensesToWorkbook(expenses: ExcelExpenseRow[]) {
   return workbook;
 }
 
-/** 브라우저에서 .xlsx 다운로드 */
+/** 브라우저에서 .xlsx 다운로드 (오늘 이후 날짜는 제외) */
 export function downloadExpensesExcel(expenses: ExcelExpenseRow[]) {
-  const workbook = expensesToWorkbook(expenses);
-  const stamp = koreaToday();
+  const today = koreaToday();
+  const occurred = expenses.filter((item) => item.date <= today);
+  const workbook = expensesToWorkbook(occurred);
+  const stamp = today;
   XLSX.writeFile(workbook, `가계부_${stamp}.xlsx`);
 }

@@ -140,14 +140,38 @@ export async function deleteRecurringExpense(id: number) {
 }
 
 /**
+ * 과거에 미리 넣었던 '아직 오지 않은 날짜'의 정기 지출 행을 제거합니다.
+ */
+export async function removeFutureRecurringExpenseRows(): Promise<{
+  removed: number;
+  error: string | null;
+}> {
+  const today = koreaToday();
+  const { data, error } = await supabase
+    .from("expenses")
+    .delete()
+    .ilike("description", "[정기#%")
+    .gt("date", today)
+    .select("id");
+
+  if (error) return { removed: 0, error: error.message };
+  return { removed: data?.length ?? 0, error: null };
+}
+
+/**
  * 주기 도래한 정기 지출을 expenses에 자동 저장.
  * description에 [정기#id] 접두로 중복 방지에 활용.
  */
 export async function applyDueRecurringExpenses(
   currentMonth = koreaToday().slice(0, 7),
-): Promise<{ applied: number; error: string | null }> {
+): Promise<{ applied: number; removedFuture: number; error: string | null }> {
+  const cleaned = await removeFutureRecurringExpenseRows();
+  if (cleaned.error) {
+    return { applied: 0, removedFuture: 0, error: cleaned.error };
+  }
+
   const { rows, error } = await loadRecurringExpenses();
-  if (error) return { applied: 0, error };
+  if (error) return { applied: 0, removedFuture: cleaned.removed, error };
 
   let applied = 0;
   for (const row of rows) {
@@ -186,7 +210,11 @@ export async function applyDueRecurringExpenses(
           subcategory: row.subcategory,
         });
         if (insertError) {
-          return { applied, error: insertError.message };
+          return {
+            applied,
+            removedFuture: cleaned.removed,
+            error: insertError.message,
+          };
         }
         applied += 1;
       }
@@ -205,7 +233,7 @@ export async function applyDueRecurringExpenses(
     }
   }
 
-  return { applied, error: null };
+  return { applied, removedFuture: cleaned.removed, error: null };
 }
 
 /** 이번 달 도래하는 정기 지출 집계 (채팅용) */

@@ -864,7 +864,7 @@ export default function Home() {
       currentMonth || koreaToday().slice(0, 7),
     );
     if (applied.error) setRecurringError(applied.error);
-    if (applied.applied > 0) await loadExpenses();
+    if (applied.applied > 0 || applied.removedFuture > 0) await loadExpenses();
     await refreshRecurring();
   }
 
@@ -2085,7 +2085,7 @@ export default function Home() {
           </h1>
           <div className="absolute right-3 top-1/2 -translate-y-1/2">
             <AppMenu
-              expenses={expenses}
+              expenses={occurredExpenses}
               onOpenCategoryEditor={() => setCategoryEditorOpen(true)}
               onOpenBudgetList={() => void openBudgetList()}
               onOpenMonthSummary={() => {
