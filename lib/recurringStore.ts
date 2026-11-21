@@ -160,9 +160,13 @@ export async function applyDueRecurringExpenses(
     if (months.length === 0) continue;
 
     let lastOk: string | null = row.last_applied_month;
+    const today = koreaToday();
     for (const month of months) {
       const marker = `[정기#${row.id}]`;
       const date = recurringDateForMonth(row.start_date, month);
+      // 아직 오지 않은 날짜는 지출로 넣지 않음 (구매 내역·합계에 미리 잡히지 않게)
+      if (date > today) continue;
+
       const description = `${marker} ${row.description}`;
 
       const { data: existing } = await supabase

@@ -53,6 +53,13 @@ import {
 import { normalizeExpenseDescription } from "@/lib/expenseDescription";
 import { koreaToday } from "@/lib/date";
 import {
+  collectRecurringReminders,
+  ensureNotificationPermission,
+  markRecurringReminderShown,
+  showRecurringNotification,
+  wasRecurringReminderShown,
+} from "@/lib/recurringReminders";
+import {
   applyDueRecurringExpenses,
   deleteRecurringExpense,
   loadRecurringExpenses,
@@ -658,6 +665,75 @@ export default function Home() {
     sending,
     resumeSendText,
   ]);
+
+  // 정기 지출: 전날·당일 오전 10시 이후 대화창 + 시스템 알림
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let cancelled = false;
+    const userId = user.id;
+
+    async function runRecurringReminders() {
+      if (cancelled || !chatDraftReadyRef.current) return;
+      const { rows, error } = await loadRecurringExpenses();
+      if (cancelled || error) return;
+
+      const due = collectRecurringReminders(rows);
+      if (due.length === 0) return;
+
+      await ensureNotificationPermission();
+      if (cancelled) return;
+
+      for (const item of due) {
+        if (
+          wasRecurringReminderShown(
+            userId,
+            item.kind,
+            item.dueDate,
+            item.row.id,
+          )
+        ) {
+          continue;
+        }
+        markRecurringReminderShown(
+          userId,
+          item.kind,
+          item.dueDate,
+          item.row.id,
+        );
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: createMessageId(),
+            role: "assistant",
+            content: item.message,
+          },
+        ]);
+        void showRecurringNotification(item.message);
+      }
+    }
+
+    const startId = window.setTimeout(() => {
+      void runRecurringReminders();
+    }, 800);
+    const intervalId = window.setInterval(() => {
+      void runRecurringReminders();
+    }, 60_000);
+
+    function onVisible() {
+      if (document.visibilityState === "visible") {
+        void runRecurringReminders();
+      }
+    }
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(startId);
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user || !currentMonth) return;
@@ -1938,7 +2014,13 @@ export default function Home() {
       ? "서버가 바빠서 다른 경로로 시도 중이에요. 조금만 더 기다려 주세요..."
       : "생각 중이에요. 보통 몇 초면 답해요...";
 
-  const total = expenses.reduce((sum, item) => sum + item.amount, 0);
+  // 아직 오지 않은 날짜(미리 들어간 정기 지출 등)는 합계·구매 내역에서 제외
+  const occurredExpenses = useMemo(() => {
+    if (!todayMax) return expenses;
+    return expenses.filter((item) => item.date <= todayMax);
+  }, [expenses, todayMax]);
+
+  const total = occurredExpenses.reduce((sum, item) => sum + item.amount, 0);
 
   const tabTitle =
     tab === "chat"
@@ -2583,7 +2665,7 @@ export default function Home() {
 
       <PurchaseHistorySheet
         open={purchaseSheetOpen}
-        items={expenses}
+        items={occurredExpenses}
         formatAmount={formatAmount}
         formatCategoryLabel={formatCategoryLabel}
         selectedId={selectedId}

@@ -32,3 +32,13 @@ export function koreaDateString(offsetDays = 0) {
 export function koreaToday() {
   return koreaDateString(0);
 }
+
+/** 한국 시간 기준 시(0–23) */
+export function koreaHour() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    hour: "numeric",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  return Number(parts.find((p) => p.type === "hour")?.value ?? 0);
+}
