@@ -20,7 +20,7 @@ type ManualExpenseFormProps = {
 const fieldClass =
   "w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]";
 
-/** 채팅 없이 날짜·금액·분류를 직접 입력 */
+/** 채팅 없이 날짜·내용·금액·분류를 직접 입력 */
 export function ManualExpenseForm({
   categoryTree,
   todayMax,
@@ -33,10 +33,10 @@ export function ManualExpenseForm({
   const defaultSubs = categoryTree[defaultCategory] ?? ["기타"];
 
   const [date, setDate] = useState(todayMax || koreaToday());
+  const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState(defaultCategory);
   const [subcategory, setSubcategory] = useState(defaultSubs[0] ?? "기타");
-  const [description, setDescription] = useState(defaultSubs[0] ?? "기타");
   const [error, setError] = useState<string | null>(null);
 
   const subs = categoryTree[category] ?? ["기타"];
@@ -53,11 +53,7 @@ export function ManualExpenseForm({
 
   useEffect(() => {
     if (!subs.includes(subcategory)) {
-      const next = subs[0] ?? "기타";
-      setSubcategory(next);
-      setDescription((prev) =>
-        !prev.trim() || prev === subcategory ? next : prev,
-      );
+      setSubcategory(subs[0] ?? "기타");
     }
   }, [subs, subcategory]);
 
@@ -65,9 +61,13 @@ export function ManualExpenseForm({
     e.preventDefault();
     setError(null);
     const n = Number(amount.replace(/,/g, ""));
-    const desc = description.trim() || subcategory;
+    const desc = description.trim();
     if (!date) {
       setError("날짜를 선택해 주세요.");
+      return;
+    }
+    if (!desc) {
+      setError("내용을 입력해 주세요.");
       return;
     }
     if (!Number.isFinite(n) || n <= 0) {
@@ -76,10 +76,6 @@ export function ManualExpenseForm({
     }
     if (!category || !subcategory) {
       setError("카테고리를 선택해 주세요.");
-      return;
-    }
-    if (!desc) {
-      setError("내용을 입력해 주세요.");
       return;
     }
 
@@ -91,9 +87,9 @@ export function ManualExpenseForm({
       subcategory,
     });
     if (ok) {
+      setDescription("");
       setAmount("");
       setDate(todayMax || koreaToday());
-      setDescription(subcategory);
     }
   }
 
@@ -103,7 +99,7 @@ export function ManualExpenseForm({
       className="mx-auto w-full max-w-md space-y-3 px-4 py-4"
     >
       <p className="px-1 text-[13px] text-[#86868b]">
-        날짜·금액·분류·내용을 직접 입력해 저장합니다.
+        날짜·내용·금액·분류를 직접 입력해 저장합니다.
       </p>
 
       <label className="block">
@@ -113,6 +109,17 @@ export function ManualExpenseForm({
           value={date}
           max={todayMax || undefined}
           onChange={(e) => setDate(e.target.value)}
+          className={fieldClass}
+          disabled={busy}
+        />
+      </label>
+
+      <label className="block">
+        <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">내용</span>
+        <input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="내용 (예: 넷플릭스)"
           className={fieldClass}
           disabled={busy}
         />
@@ -156,13 +163,7 @@ export function ManualExpenseForm({
         </span>
         <select
           value={subcategory}
-          onChange={(e) => {
-            const next = e.target.value;
-            setSubcategory(next);
-            setDescription((prev) =>
-              !prev.trim() || prev === subcategory ? next : prev,
-            );
-          }}
+          onChange={(e) => setSubcategory(e.target.value)}
           className={fieldClass}
           disabled={busy}
         >
@@ -172,17 +173,6 @@ export function ManualExpenseForm({
             </option>
           ))}
         </select>
-      </label>
-
-      <label className="block">
-        <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">내용</span>
-        <input
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="예: 스타벅스"
-          className={fieldClass}
-          disabled={busy}
-        />
       </label>
 
       {error && <p className="px-1 text-[13px] text-red-600">{error}</p>}
