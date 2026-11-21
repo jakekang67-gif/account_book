@@ -9,6 +9,7 @@ import {
 } from "@/lib/excel";
 import {
   clearGoogleSession,
+  ensureFreshGoogleSession,
   loadGoogleSession,
   saveGoogleSession,
   type GoogleSession,
@@ -99,35 +100,57 @@ function MenuWithGoogle({
     setSession(loadGoogleSession());
   }, []);
 
+  // auth-code + 서버 교환으로 refresh token까지 받아 오래 유지
+  // prompt/access_type은 GIS 타입에 없어 단언으로 전달
   const login = useGoogleLogin({
+    flow: "auth-code",
+    ux_mode: "popup",
+    select_account: true,
     scope:
       "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email",
-    onSuccess: async (tokenResponse) => {
+    prompt: "consent",
+    access_type: "offline",
+    onSuccess: async (codeResponse: { code?: string }) => {
       setBusy(true);
       setStatus(null);
       try {
-        const profileRes = await fetch(
-          "https://www.googleapis.com/oauth2/v3/userinfo",
-          {
-            headers: {
-              Authorization: `Bearer ${tokenResponse.access_token}`,
-            },
-          },
-        );
-        if (!profileRes.ok) {
-          throw new Error("구글 프로필을 가져오지 못했습니다.");
+        const code = codeResponse.code;
+        if (!code) {
+          throw new Error("구글 인가 코드를 받지 못했습니다.");
         }
-        const profile = (await profileRes.json()) as { email?: string };
-        if (!profile.email) {
-          throw new Error("구글 이메일을 확인할 수 없습니다.");
-        }
-        const next = {
-          accessToken: tokenResponse.access_token,
-          email: profile.email,
+        const response = await fetch("/api/google/oauth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "exchange", code }),
+        });
+        const data = (await response.json()) as {
+          accessToken?: string;
+          refreshToken?: string | null;
+          expiresIn?: number;
+          email?: string;
+          error?: string;
         };
+        if (!response.ok || !data.accessToken || !data.email) {
+          throw new Error(data.error ?? "구글 토큰 교환에 실패했습니다.");
+        }
+        const prev = loadGoogleSession();
+        const next: GoogleSession = {
+          accessToken: data.accessToken,
+          email: data.email,
+          refreshToken: data.refreshToken || prev?.refreshToken || null,
+          expiresAt: data.expiresIn
+            ? Date.now() + data.expiresIn * 1000
+            : Date.now() + 3500 * 1000,
+        };
+        if (!next.refreshToken) {
+          setStatus(
+            `연결됨: ${data.email} (장기 유지 토큰 없음 · 다시 「구글 계정 연결」을 눌러 주세요)`,
+          );
+        } else {
+          setStatus(`연결됨: ${data.email} (자동 갱신 사용)`);
+        }
         saveGoogleSession(next);
         setSession(next);
-        setStatus(`연결됨: ${profile.email}`);
       } catch (error) {
         setStatus(
           error instanceof Error ? error.message : "구글 연결에 실패했습니다.",
@@ -137,7 +160,8 @@ function MenuWithGoogle({
       }
     },
     onError: () => setStatus("구글 로그인에 실패했습니다."),
-  });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
 
   return (
     <MenuPanel
@@ -255,13 +279,24 @@ function MenuPanel({
     setBusy(true);
     setStatus("메일 보내는 중...");
     try {
+      const fresh = await ensureFreshGoogleSession();
+      if (!fresh.session) {
+        clearGoogleSession();
+        setSession(null);
+        throw new Error(
+          fresh.error ??
+            "구글 연결이 만료됐어요. 메뉴에서 「구글 계정 연결」을 다시 해주세요.",
+        );
+      }
+      setSession(fresh.session);
+
       const file = expensesToExcelBase64(expenses);
       const response = await fetch("/api/export/gmail", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          accessToken: session.accessToken,
-          to: session.email,
+          accessToken: fresh.session.accessToken,
+          to: fresh.session.email,
           fileName: file.fileName,
           fileBase64: file.base64,
         }),
@@ -269,6 +304,26 @@ function MenuPanel({
       const data = (await response.json()) as { error?: string };
       if (!response.ok) {
         if (response.status === 401) {
+          // 401이면 만료로 보고 강제 refresh 후 재시도
+          const retried = await ensureFreshGoogleSession({ force: true });
+          if (retried.session?.refreshToken) {
+            const retryRes = await fetch("/api/export/gmail", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                accessToken: retried.session.accessToken,
+                to: retried.session.email,
+                fileName: file.fileName,
+                fileBase64: file.base64,
+              }),
+            });
+            if (retryRes.ok) {
+              setSession(retried.session);
+              setStatus(`${retried.session.email}로 메일을 보냈습니다.`);
+              setMenuOpen(false);
+              return;
+            }
+          }
           clearGoogleSession();
           setSession(null);
           throw new Error(
@@ -277,7 +332,7 @@ function MenuPanel({
         }
         throw new Error(data.error ?? "메일 발송에 실패했습니다.");
       }
-      setStatus(`${session.email}로 메일을 보냈습니다.`);
+      setStatus(`${fresh.session.email}로 메일을 보냈습니다.`);
       setMenuOpen(false);
     } catch (error) {
       setStatus(
