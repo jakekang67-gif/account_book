@@ -666,6 +666,20 @@ export default function Home() {
     resumeSendText,
   ]);
 
+  // 로그인 직후 알림 권한을 미리 요청 (안내할 정기 지출이 없어도)
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled || !chatDraftReadyRef.current) return;
+      void ensureNotificationPermission();
+    }, 1200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [user?.id]);
+
   // 정기 지출: 전날·당일 오전 10시 이후 대화창 + 시스템 알림
   useEffect(() => {
     if (!user?.id) return;
@@ -857,6 +871,8 @@ export default function Home() {
 
   async function openRecurringSheet() {
     setRecurringOpen(true);
+    // 메뉴 클릭(사용자 제스처) 시점에 알림 권한 요청 — 브라우저 제한에 더 잘 맞음
+    void ensureNotificationPermission();
     const applied = await applyDueRecurringExpenses(
       currentMonth || koreaToday().slice(0, 7),
     );
