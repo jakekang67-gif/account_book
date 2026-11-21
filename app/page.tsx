@@ -2312,24 +2312,34 @@ export default function Home() {
                   )}
                   {showActions && (
                     <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void copyChatMessage(message.id, message.content)
-                        }
-                        className="rounded-full bg-[#5856d6] px-3.5 py-1.5 text-[13px] font-medium text-white shadow-[0_2px_8px_rgba(0,0,0,0.12)]"
-                      >
-                        {copiedMessageId === message.id ? "복사됨" : "복사"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          beginEditChat(message.id, message.content)
-                        }
-                        className="rounded-full bg-[#1d1d1f] px-3.5 py-1.5 text-[13px] font-medium text-white shadow-[0_2px_8px_rgba(0,0,0,0.12)]"
-                      >
-                        수정
-                      </button>
+                      {/* 저장된 지출(expenseId)은 복사·수정 없이 삭제만 */}
+                      {!message.expenseId && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void copyChatMessage(
+                                message.id,
+                                message.content,
+                              )
+                            }
+                            className="rounded-full bg-[#5856d6] px-3.5 py-1.5 text-[13px] font-medium text-white shadow-[0_2px_8px_rgba(0,0,0,0.12)]"
+                          >
+                            {copiedMessageId === message.id
+                              ? "복사됨"
+                              : "복사"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              beginEditChat(message.id, message.content)
+                            }
+                            className="rounded-full bg-[#1d1d1f] px-3.5 py-1.5 text-[13px] font-medium text-white shadow-[0_2px_8px_rgba(0,0,0,0.12)]"
+                          >
+                            수정
+                          </button>
+                        </>
+                      )}
                       <button
                         type="button"
                         onClick={() => deleteOneChat(message.id)}
