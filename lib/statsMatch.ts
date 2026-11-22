@@ -12,20 +12,26 @@ export function looksLikeTotalExpenseQuestion(text: string) {
   const t = text.trim();
   if (!t || hasExpenseAmount(t)) return false;
   const compact = t.replace(/\s+/g, "");
-  // 분류 이름이 질문 핵심이면 총지출이 아님 (예: 담배 얼마)
-  // 후보 추출은 호출측에서 하고, 여기서는 총액 표현만 판별
-  return (
-    /(총\s*지출|지출\s*합계|지출\s*총액|총액|전체\s*지출|모두\s*얼마|다\s*합쳐)/.test(
+
+  // 특정 분류를 콕 집어 물은 경우는 총지출이 아님 (예: 담배 얼마, 주류 합계)
+  // → 호출측에서 후보가 있어도, 아래 총지출 신호가 더 분명하면 총지출로 처리
+
+  const hasTotalCue =
+    /(총\s*지출|지출\s*합계|지출\s*총액|총액|전체\s*지출|모두\s*얼마|다\s*합쳐|총지출)/.test(
       t,
     ) ||
-    /(이번|저번|지난)\s*달\s*(총\s*)?(지출|합계|얼마)/.test(t) ||
-    /^(이번달|저번달|지난달)?(의)?(총)?(지출|합계|얼마)(야|에요|예요|인가요|인가|지)?\??$/.test(
+    /총지출|지출합계|지출총액|전체지출/.test(compact);
+
+  const hasMonthTotalCue =
+    /(이번|저번|지난)\s*달\s*(의\s*)?(총\s*)?(지출|합계|얼마)/.test(t) ||
+    /(이번달|저번달|지난달)(의)?(총)?(지출|합계|얼마)/.test(compact);
+
+  const isShortTotalAsk =
+    /^(이번달|저번달|지난달)?(의)?(총)?(지출|합계|얼마)(이|가|은|는)?(야|에요|예요|인가요|인가|지|얼마|얼마야|알려줘|보여줘)?\??$/.test(
       compact,
-    ) ||
-    /^총지출/.test(compact) ||
-    /얼마(야|에요|예요|인가요)?\??$/.test(compact) &&
-      /(이번달|저번달|지난달|총|합계|지출)/.test(compact)
-  );
+    );
+
+  return hasTotalCue || hasMonthTotalCue || isShortTotalAsk;
 }
 
 function norm(s: string) {

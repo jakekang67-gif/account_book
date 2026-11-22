@@ -1980,10 +1980,12 @@ export default function Home() {
         );
         const candidates = findStatsCandidates(text, categoryTree);
 
-        // 총지출·합계 질문은 확인 없이 바로 답변
-        if (candidates.length === 0 && looksLikeTotalExpenseQuestion(text)) {
+        // 총지출·합계 질문: 분류 후보가 있어도 확인 없이 바로 답변
+        if (looksLikeTotalExpenseQuestion(text)) {
           const today = todayMax || koreaToday();
           const rows = expenses.filter((item) => item.date <= today);
+          setPendingPhase(null);
+          setPendingStatsCandidates([]);
           pushAssistant(formatStatsBreakdownReply(rows, monthKey));
           return;
         }
