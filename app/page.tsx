@@ -1985,6 +1985,17 @@ export default function Home() {
         const today = todayMax || koreaToday();
         const rows = expenses.filter((item) => item.date <= today);
 
+        const replyCategoryStats = (
+          category: string,
+          subcategory: string | null = null,
+        ) => {
+          setPendingPhase(null);
+          setPendingStatsCandidates([]);
+          pushAssistant(
+            formatStatsBreakdownReply(rows, monthKey, category, subcategory),
+          );
+        };
+
         // 총지출·합계이거나, 특정 분류가 없으면 확인 없이 바로 월 합계 답변
         if (looksLikeTotalExpenseQuestion(text) || candidates.length === 0) {
           setPendingPhase(null);
@@ -1993,23 +2004,24 @@ export default function Home() {
           return;
         }
 
-        // 분류가 하나만 분명하면 확인 없이 바로 답변
-        if (candidates.length === 1) {
-          const only = candidates[0];
-          setPendingPhase(null);
-          setPendingStatsCandidates([]);
-          pushAssistant(
-            formatStatsBreakdownReply(
-              rows,
-              monthKey,
-              only.category,
-              only.subcategory,
-            ),
+        // 같은 대분류만 가리키면 (예: 가족 지출?) 확인 없이
+        // 대분류 합계 + 소분류 내역을 바로 보여 줌
+        const uniqueCategories = [
+          ...new Set(candidates.map((c) => c.category)),
+        ];
+        if (uniqueCategories.length === 1) {
+          const category = uniqueCategories[0];
+          const onlySub =
+            candidates.length === 1 ? candidates[0].subcategory : null;
+          // 후보가 소분류 하나뿐이면 그 소분류만, 아니면 대분류 전체(소분류 목록)
+          replyCategoryStats(
+            category,
+            onlySub && candidates.length === 1 ? onlySub : null,
           );
           return;
         }
 
-        // 분류 후보가 여러 개일 때만 확인
+        // 서로 다른 대분류 후보가 여러 개일 때만 확인
         setPendingPhase("await_stats_confirm");
         setPendingStatsMonth(monthKey);
         setPendingStatsCandidates(candidates);
