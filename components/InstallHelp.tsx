@@ -6,7 +6,7 @@ type InstallHelpProps = {
 };
 
 /** 캐시 때문에 예전 사진이 안 바뀌는 것 방지 */
-const IMG_V = "20261122c";
+const IMG_V = "20261122e";
 
 const CHROME_STEPS: { src: string; caption: string }[] = [
   {
