@@ -81,7 +81,7 @@ export function InstallHelp({ open, onClose }: InstallHelpProps) {
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <section>
             <h3 className="mb-2 text-[14px] font-semibold text-[#1d1d1f]">
-              Chrome으로 추가하기
+              Chrome으로 추가하기(추천)
             </h3>
             <div className="mb-3 overflow-hidden rounded-2xl bg-[#f5f5f7] px-3 py-2.5">
               <p className="mb-1.5 text-[12px] text-[#86868b]">가계부 주소</p>
