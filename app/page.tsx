@@ -1787,8 +1787,10 @@ export default function Home() {
       }
 
       // 0-b) 통계 분류 확인 단계
+      // 새 통계 질문(총지출 등)이면 이 단계를 건너뛰고 아래 intent===stats 에서 처리
       if (
         pendingPhase === "await_stats_confirm" &&
+        earlyIntent !== "stats" &&
         earlyIntent !== "chat_cleanup" &&
         earlyIntent !== "recurring_stats"
       ) {
@@ -1980,25 +1982,34 @@ export default function Home() {
         );
         const candidates = findStatsCandidates(text, categoryTree);
 
-        // 총지출·합계 질문: 분류 후보가 있어도 확인 없이 바로 답변
-        if (looksLikeTotalExpenseQuestion(text)) {
-          const today = todayMax || koreaToday();
-          const rows = expenses.filter((item) => item.date <= today);
+        const today = todayMax || koreaToday();
+        const rows = expenses.filter((item) => item.date <= today);
+
+        // 총지출·합계이거나, 특정 분류가 없으면 확인 없이 바로 월 합계 답변
+        if (looksLikeTotalExpenseQuestion(text) || candidates.length === 0) {
           setPendingPhase(null);
           setPendingStatsCandidates([]);
           pushAssistant(formatStatsBreakdownReply(rows, monthKey));
           return;
         }
 
-        if (candidates.length === 0) {
-          setPendingPhase("await_stats_confirm");
-          setPendingStatsMonth(monthKey);
+        // 분류가 하나만 분명하면 확인 없이 바로 답변
+        if (candidates.length === 1) {
+          const only = candidates[0];
+          setPendingPhase(null);
           setPendingStatsCandidates([]);
-          pushAssistant(formatStatsConfirmQuestion([]));
+          pushAssistant(
+            formatStatsBreakdownReply(
+              rows,
+              monthKey,
+              only.category,
+              only.subcategory,
+            ),
+          );
           return;
         }
 
-        // 분류별 질문은 확인 후 금액 답변
+        // 분류 후보가 여러 개일 때만 확인
         setPendingPhase("await_stats_confirm");
         setPendingStatsMonth(monthKey);
         setPendingStatsCandidates(candidates);
