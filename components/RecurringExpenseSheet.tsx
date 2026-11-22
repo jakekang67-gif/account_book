@@ -49,6 +49,8 @@ export function RecurringExpenseSheet({
     categories.find((c) => c !== "수입") ?? categories[0] ?? "기타";
 
   const [editingId, setEditingId] = useState<number | null>(null);
+  /** 목록에서 탭해 수정·삭제를 보여줄 항목 */
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState(defaultCategory);
@@ -99,7 +101,16 @@ export function RecurringExpenseSheet({
     setShowForm(false);
   }
 
+  useEffect(() => {
+    if (!open) {
+      setSelectedId(null);
+      resetForm();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 시트 닫힐 때만 초기화
+  }, [open]);
+
   function startAdd() {
+    setSelectedId(null);
     setEditingId(null);
     setDescription("");
     setAmount("");
@@ -121,6 +132,10 @@ export function RecurringExpenseSheet({
     setStartDate(row.start_date);
     setShowForm(true);
     setFormError(null);
+  }
+
+  function toggleSelect(id: number) {
+    setSelectedId((prev) => (prev === id ? null : id));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -231,53 +246,69 @@ export function RecurringExpenseSheet({
             </p>
           ) : (
             <ul className="space-y-2">
-              {sortedRows.map((row) => (
-                <li
-                  key={row.id}
-                  className="rounded-2xl bg-[#f5f5f7] px-3 py-2.5"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-[14px] font-medium text-[#1d1d1f]">
-                        {row.description}
-                      </p>
-                      <p className="text-[11px] text-[#86868b]">
-                        {row.start_date} · {row.interval_months}개월마다 ·{" "}
-                        {row.category}_{row.subcategory}
-                      </p>
-                    </div>
-                    <p className="shrink-0 text-[14px] font-medium tabular-nums text-[#1d1d1f]">
-                      {formatAmount(row.amount)}원
-                    </p>
-                  </div>
-                  <div className="mt-2 flex gap-2">
+              {sortedRows.map((row) => {
+                const isSelected = selectedId === row.id;
+                return (
+                  <li
+                    key={row.id}
+                    className={`rounded-2xl bg-[#f5f5f7] px-3 py-1.5 ${
+                      isSelected ? "ring-1 ring-black/10" : ""
+                    }`}
+                  >
                     <button
                       type="button"
-                      disabled={busy}
-                      onClick={() => startEdit(row)}
-                      className="rounded-xl bg-white px-3 py-1.5 text-[12px] font-medium text-[#1d1d1f] ring-1 ring-black/5 disabled:opacity-40"
+                      onClick={() => toggleSelect(row.id)}
+                      className="flex w-full items-start justify-between gap-2 text-left"
                     >
-                      수정
+                      <div className="min-w-0 leading-tight">
+                        <p className="truncate text-[14px] font-medium text-[#1d1d1f]">
+                          {row.description}
+                        </p>
+                        <p className="text-[11px] text-[#86868b]">
+                          {row.start_date} · {row.interval_months}개월마다 ·{" "}
+                          {row.category}_{row.subcategory}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-[14px] font-medium tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
+                        {formatAmount(row.amount)}
+                        <span className="ml-0.5 text-[11px] font-normal text-[#86868b]">
+                          원
+                        </span>
+                      </p>
                     </button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `"${row.description}" 정기 지출을 삭제할까요? (이미 저장된 지출은 그대로 둡니다)`,
-                          )
-                        ) {
-                          void onDelete(row.id);
-                        }
-                      }}
-                      className="rounded-xl bg-white px-3 py-1.5 text-[12px] font-medium text-[#b42318] ring-1 ring-black/5 disabled:opacity-40"
-                    >
-                      삭제
-                    </button>
-                  </div>
-                </li>
-              ))}
+                    {isSelected && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => startEdit(row)}
+                          className="rounded-lg bg-white px-2.5 py-1.5 text-[11px] font-medium text-[#1d1d1f] disabled:opacity-40"
+                        >
+                          수정
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `"${row.description}" 정기 지출을 삭제할까요? (이미 저장된 지출은 그대로 둡니다)`,
+                              )
+                            ) {
+                              void onDelete(row.id).then(() => {
+                                setSelectedId(null);
+                              });
+                            }
+                          }}
+                          className="rounded-lg bg-white px-2.5 py-1.5 text-[11px] font-medium text-[#b42318] disabled:opacity-40"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
