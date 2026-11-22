@@ -6,7 +6,7 @@ type InstallHelpProps = {
 };
 
 /** 캐시 때문에 예전 사진이 안 바뀌는 것 방지 */
-const IMG_V = "20261122g";
+const IMG_V = "20261122h";
 
 const CHROME_STEPS: { src: string; caption: string }[] = [
   {
@@ -102,7 +102,7 @@ export function InstallHelp({ open, onClose }: InstallHelpProps) {
                   <img
                     src={step.src}
                     alt={step.caption}
-                    className="h-auto w-full rounded-2xl border border-black/5 bg-[#f5f5f7] object-cover object-top"
+                    className="h-auto w-full rounded-2xl border border-black/5 bg-[#f5f5f7]"
                   />
                 </li>
               ))}
