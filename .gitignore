@@ -43,3 +43,6 @@ next-env.d.ts
 
 # 안드로이드 패키지·서명키 (유출 금지)
 /android-app/
+
+# 홈화면 안내 원본 스크린샷 (처리된 step-*.jpg 만 배포)
+/public/install-guide/raw/
