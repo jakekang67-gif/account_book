@@ -75,14 +75,11 @@ export function AppLockScreen({ mode, onUnlocked }: AppLockScreenProps) {
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
-            name="app-lock-pin"
             autoComplete="one-time-code"
             autoCorrect="off"
             autoCapitalize="off"
             spellCheck={false}
-            data-form-type="other"
-            data-lpignore="true"
-            data-1p-ignore="true"
+            name="app-lock-pin"
             value={pin}
             onChange={(e) =>
               setPin(e.target.value.replace(/\D/g, "").slice(0, 8))
@@ -102,14 +99,11 @@ export function AppLockScreen({ mode, onUnlocked }: AppLockScreenProps) {
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
-              name="app-lock-pin-confirm"
               autoComplete="one-time-code"
               autoCorrect="off"
               autoCapitalize="off"
               spellCheck={false}
-              data-form-type="other"
-              data-lpignore="true"
-              data-1p-ignore="true"
+              name="app-lock-pin-confirm"
               value={pinConfirm}
               onChange={(e) =>
                 setPinConfirm(e.target.value.replace(/\D/g, "").slice(0, 8))

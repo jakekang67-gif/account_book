@@ -980,18 +980,18 @@ export default function Home() {
     setExpenseError(null);
 
     try {
-      const { data, error } = await supabase
-        .from("expenses")
+    const { data, error } = await supabase
+      .from("expenses")
         .select(
           "id, created_at, date, amount, description, category, subcategory",
         )
         .order("date", { ascending: false })
         .order("id", { ascending: false });
 
-      if (error) {
+    if (error) {
         setExpenseError(error.message);
-        setExpenses([]);
-      } else {
+      setExpenses([]);
+    } else {
         const rows = ((data as Expense[]) ?? []).map((row) => {
           const nextDesc = normalizeExpenseDescription(
             row.description,
@@ -1787,10 +1787,8 @@ export default function Home() {
       }
 
       // 0-b) 통계 분류 확인 단계
-      // 새 통계 질문(총지출 등)이면 이 단계를 건너뛰고 아래 intent===stats 에서 처리
       if (
         pendingPhase === "await_stats_confirm" &&
-        earlyIntent !== "stats" &&
         earlyIntent !== "chat_cleanup" &&
         earlyIntent !== "recurring_stats"
       ) {
@@ -1982,46 +1980,23 @@ export default function Home() {
         );
         const candidates = findStatsCandidates(text, categoryTree);
 
-        const today = todayMax || koreaToday();
-        const rows = expenses.filter((item) => item.date <= today);
-
-        const replyCategoryStats = (
-          category: string,
-          subcategory: string | null = null,
-        ) => {
-          setPendingPhase(null);
-          setPendingStatsCandidates([]);
-          pushAssistant(
-            formatStatsBreakdownReply(rows, monthKey, category, subcategory),
-          );
-        };
-
-        // 총지출·합계이거나, 특정 분류가 없으면 확인 없이 바로 월 합계 답변
-        if (looksLikeTotalExpenseQuestion(text) || candidates.length === 0) {
-          setPendingPhase(null);
-          setPendingStatsCandidates([]);
+        // 총지출·합계 질문은 확인 없이 바로 답변
+        if (candidates.length === 0 && looksLikeTotalExpenseQuestion(text)) {
+          const today = todayMax || koreaToday();
+          const rows = expenses.filter((item) => item.date <= today);
           pushAssistant(formatStatsBreakdownReply(rows, monthKey));
           return;
         }
 
-        // 같은 대분류만 가리키면 (예: 가족 지출?) 확인 없이
-        // 대분류 합계 + 소분류 내역을 바로 보여 줌
-        const uniqueCategories = [
-          ...new Set(candidates.map((c) => c.category)),
-        ];
-        if (uniqueCategories.length === 1) {
-          const category = uniqueCategories[0];
-          const onlySub =
-            candidates.length === 1 ? candidates[0].subcategory : null;
-          // 후보가 소분류 하나뿐이면 그 소분류만, 아니면 대분류 전체(소분류 목록)
-          replyCategoryStats(
-            category,
-            onlySub && candidates.length === 1 ? onlySub : null,
-          );
+        if (candidates.length === 0) {
+          setPendingPhase("await_stats_confirm");
+          setPendingStatsMonth(monthKey);
+          setPendingStatsCandidates([]);
+          pushAssistant(formatStatsConfirmQuestion([]));
           return;
         }
 
-        // 서로 다른 대분류 후보가 여러 개일 때만 확인
+        // 분류별 질문은 확인 후 금액 답변
         setPendingPhase("await_stats_confirm");
         setPendingStatsMonth(monthKey);
         setPendingStatsCandidates(candidates);
@@ -2202,7 +2177,7 @@ export default function Home() {
   }
 
   if (authLoading) {
-    return (
+  return (
       <div className="flex min-h-[100dvh] flex-1 items-center justify-center bg-[#f5f5f7] text-[14px] text-[#86868b]">
         불러오는 중...
       </div>
@@ -2433,7 +2408,7 @@ export default function Home() {
                         >
                           {sending ? "저장 중..." : "저장"}
                         </button>
-                      </div>
+          </div>
                     </div>
                   ) : (
                     <div
@@ -2560,6 +2535,8 @@ export default function Home() {
                 </p>
               )}
               <form
+                autoComplete="off"
+                data-form-type="other"
                 onSubmit={(e) => {
                   e.preventDefault();
                   forceDismissKeyboard();
@@ -2619,14 +2596,14 @@ export default function Home() {
                   enterKeyHint="send"
                   autoComplete="off"
                   autoCorrect="off"
-                  autoCapitalize="off"
+                  autoCapitalize="sentences"
                   spellCheck={false}
                   data-form-type="other"
                   data-lpignore="true"
                   data-1p-ignore="true"
                   className="min-h-9 min-w-0 w-full rounded-2xl bg-[#f5f5f7] px-3 py-1.5 text-[14px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed] disabled:opacity-60 sm:px-4"
                 />
-                <button
+          <button
                   type="button"
                   disabled={sending || !input.trim()}
                   onPointerDown={(e) => {
@@ -2643,8 +2620,8 @@ export default function Home() {
                   className="min-h-9 shrink-0 rounded-2xl bg-[#1d1d1f] px-3 py-1.5 text-[13px] font-medium text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-35 sm:px-4"
                 >
                   전송
-                </button>
-              </form>
+          </button>
+        </form>
             </>
           )}
         </div>
@@ -2740,14 +2717,14 @@ export default function Home() {
                   <p className="text-[15px] tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
                     {formatAmount(categoryMonthTotal)}
                     <span className="ml-0.5 text-[12px] text-[#86868b]">원</span>
-                  </p>
-                </div>
+            </p>
+          </div>
 
                 {categoryTotals.length === 0 ? (
                   <p className="rounded-2xl bg-white px-4 py-8 text-center text-[14px] text-[#86868b]">
                     이 달 내역이 없습니다.
-                  </p>
-                ) : (
+            </p>
+          ) : (
                   <>
                     <p className="px-1 text-[13px] font-medium text-[#86868b]">
                       카테고리 비율
@@ -2806,17 +2783,17 @@ export default function Home() {
                                         원
                                       </span>
                                     </p>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
+                </li>
+              ))}
+            </ul>
+          )}
                           </li>
                         );
                       })}
                     </ul>
                   </>
                 )}
-              </div>
+    </div>
             )}
           </div>
         )}
