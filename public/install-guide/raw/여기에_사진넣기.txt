@@ -1,0 +1,13 @@
+﻿원본 스크린샷(분홍 표시 없음)을 이 폴더에 둡니다.
+강조 박스는 scripts/make_install_guide_highlights.py 로 다시 그립니다.
+
+파일 대응:
+KakaoTalk_20261122_114259032.jpg     → step-01 Chrome 찾기
+KakaoTalk_20261122_114259032_01.jpg  → step-02 주소 열기
+KakaoTalk_20261122_114259032_02.jpg  → step-03 ⋮ 메뉴
+KakaoTalk_20261122_114259032_03.jpg  → step-04 설치 및 바로가기
+KakaoTalk_20261122_114259032_04.jpg  → step-05 설치
+KakaoTalk_20261122_114259032_05.jpg  → step-06 설치 확인
+KakaoTalk_20261122_114259032_06.jpg  → step-07 앱 목록
+KakaoTalk_20261122_114259032_07.jpg  → step-08 홈 화면에 추가
+KakaoTalk_20261122_114259032_08.jpg  → url.jpg
