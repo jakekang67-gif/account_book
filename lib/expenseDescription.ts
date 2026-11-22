@@ -3,7 +3,8 @@
  * 예: "담배 구매" → "담배", "커피 구입" → "커피"
  */
 
-const TRAILING_NOISE = /\s*(구매|구입|결제|요금|비용)$/u;
+// "요금"은 내용의 일부로 두는 경우가 많아 제거하지 않습니다. (예: 핸드폰 요금)
+const TRAILING_NOISE = /\s*(구매|구입|결제|비용)$/u;
 
 export function normalizeExpenseDescription(
   description: string,
