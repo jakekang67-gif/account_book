@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export type PurchaseHistoryItem = {
   id: number;
@@ -39,6 +39,11 @@ export function PurchaseHistorySheet({
 }: PurchaseHistorySheetProps) {
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<"all" | "search">("all");
+  /** 찾아보기 시 키보드 위 보이는 영역 (visualViewport) */
+  const [visibleBox, setVisibleBox] = useState<{
+    top: number;
+    height: number;
+  } | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase().replace(/\s+/g, "");
@@ -67,17 +72,72 @@ export function PurchaseHistorySheet({
     });
   }, [items, query, mode, formatAmount]);
 
+  useEffect(() => {
+    if (!open) {
+      setMode("all");
+      setQuery("");
+      setVisibleBox(null);
+      return;
+    }
+    if (mode !== "search") {
+      setVisibleBox(null);
+      return;
+    }
+
+    const vv = window.visualViewport;
+    if (!vv) {
+      setVisibleBox({ top: 0, height: window.innerHeight });
+      return;
+    }
+
+    const update = () => {
+      // iOS 키보드: 보이는 영역만 시트로 써서 검색칸이 항상 위에 있게 함
+      setVisibleBox({
+        top: Math.round(vv.offsetTop),
+        height: Math.round(vv.height),
+      });
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, [open, mode]);
+
   if (!open) return null;
 
+  const searchPinnedTop = mode === "search";
+  const overlayStyle =
+    searchPinnedTop && visibleBox
+      ? {
+          top: visibleBox.top,
+          height: visibleBox.height,
+          bottom: "auto" as const,
+        }
+      : undefined;
+
   return (
-    <div className="fixed inset-0 z-[65] flex items-end justify-center bg-black/35 sm:items-center sm:p-4">
+    <div
+      style={overlayStyle}
+      className={`fixed inset-x-0 z-[65] flex justify-center bg-black/35 sm:p-4 ${
+        searchPinnedTop
+          ? "top-0 h-dvh items-stretch sm:items-stretch"
+          : "inset-y-0 items-end sm:items-center"
+      }`}
+    >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="purchase-history-title"
-        className="flex max-h-[85dvh] w-full max-w-md flex-col rounded-t-3xl bg-white shadow-[0_12px_40px_rgba(0,0,0,0.18)] sm:rounded-3xl"
+        className={`flex w-full max-w-md flex-col bg-white shadow-[0_12px_40px_rgba(0,0,0,0.18)] ${
+          searchPinnedTop
+            ? "h-full max-h-full rounded-none sm:rounded-3xl"
+            : "max-h-[85dvh] rounded-t-3xl sm:rounded-3xl"
+        }`}
       >
-        <div className="flex items-center justify-between border-b border-black/5 px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between border-b border-black/5 px-4 py-3">
           <h2
             id="purchase-history-title"
             className="text-[16px] font-semibold text-[#1d1d1f]"
@@ -93,7 +153,7 @@ export function PurchaseHistorySheet({
           </button>
         </div>
 
-        <div className="flex gap-2 px-4 pt-3">
+        <div className="flex shrink-0 gap-2 px-4 pt-3">
           <button
             type="button"
             onClick={() => {
@@ -122,13 +182,15 @@ export function PurchaseHistorySheet({
         </div>
 
         {mode === "search" && (
-          <div className="px-4 pt-3">
+          <div className="shrink-0 px-4 pt-3">
             <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="단어 입력 (예: 담배)"
               autoFocus
+              enterKeyHint="search"
+              autoComplete="off"
               className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[14px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed]"
             />
           </div>
