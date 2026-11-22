@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+!.env.local
 
 # vercel
 .vercel
@@ -39,10 +41,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-.env.local
 
 # 안드로이드 패키지·서명키 (유출 금지)
 /android-app/
-
-# 홈화면 안내 원본 스크린샷 (처리된 step-*.jpg 만 배포)
-/public/install-guide/raw/
