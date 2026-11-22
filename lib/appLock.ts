@@ -40,7 +40,22 @@ export function setAppLockRemember(remember: boolean) {
     window.localStorage.setItem(REMEMBER_KEY, remember ? "1" : "0");
     if (remember) {
       window.sessionStorage.setItem(SESSION_UNLOCK_KEY, "1");
+    } else {
+      // 기억하기 OFF면 앱을 나갔다 올 때 다시 묻도록 세션 해제
+      window.sessionStorage.removeItem(SESSION_UNLOCK_KEY);
     }
+  } catch {
+    // ignore
+  }
+}
+
+/** 기억하기가 꺼져 있으면 백그라운드 전환 시 다시 잠금 */
+export function lockAppIfNotRemembered() {
+  if (typeof window === "undefined") return;
+  try {
+    if (!hasAppLockPin()) return;
+    if (getAppLockRemember()) return;
+    window.sessionStorage.removeItem(SESSION_UNLOCK_KEY);
   } catch {
     // ignore
   }

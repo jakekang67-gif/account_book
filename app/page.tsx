@@ -6,6 +6,7 @@ import { AppMenu } from "@/components/AppMenu";
 import {
   hasAppLockPin,
   isAppLockUnlocked,
+  lockAppIfNotRemembered,
   lockAppNow,
 } from "@/lib/appLock";
 import { MonthIncomeExpenseSheet } from "@/components/MonthIncomeExpenseSheet";
@@ -870,13 +871,7 @@ export default function Home() {
     };
   }, [messages, sending, contextMessageId]);
 
-  // 로그인 후 앱 잠금 여부 확인
-  useEffect(() => {
-    if (!user) {
-      setAppLockChecked(false);
-      setAppLockMode(null);
-      return;
-    }
+  function refreshAppLockGate() {
     if (!hasAppLockPin()) {
       setAppLockMode("setup");
     } else if (!isAppLockUnlocked()) {
@@ -885,6 +880,30 @@ export default function Home() {
       setAppLockMode(null);
     }
     setAppLockChecked(true);
+  }
+
+  // 로그인 후 앱 잠금 여부 확인
+  useEffect(() => {
+    if (!user) {
+      setAppLockChecked(false);
+      setAppLockMode(null);
+      return;
+    }
+    refreshAppLockGate();
+  }, [user?.id]);
+
+  // 기억하기 OFF면 앱을 나갔다 다시 열 때 비밀번호를 다시 물음
+  useEffect(() => {
+    if (!user) return;
+    function onHide() {
+      if (document.visibilityState === "hidden") {
+        lockAppIfNotRemembered();
+      } else if (document.visibilityState === "visible") {
+        refreshAppLockGate();
+      }
+    }
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
   }, [user?.id]);
 
   // 길게 누르기 메뉴가 잘리지 않도록 해당 말풍선까지 스크롤
@@ -2232,10 +2251,6 @@ export default function Home() {
                 setChatNoticeShowRequestId((n) => n + 1);
               }}
               onOpenAppLock={() => setAppLockMode("setup")}
-              onLockNow={() => {
-                lockAppNow();
-                setAppLockMode("unlock");
-              }}
               onOpenChange={setAppMenuOpen}
               accountEmail={user.email}
               onSignOut={() => {

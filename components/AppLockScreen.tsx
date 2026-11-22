@@ -17,7 +17,8 @@ type AppLockScreenProps = {
 export function AppLockScreen({ mode, onUnlocked }: AppLockScreenProps) {
   const [pin, setPin] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
-  const [remember, setRemember] = useState(true);
+  // 기본은 매번 입력. 체크하면 다음 열 때 생략
+  const [remember, setRemember] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,10 +124,10 @@ export function AppLockScreen({ mode, onUnlocked }: AppLockScreenProps) {
             disabled={busy}
           />
           <span className="text-[13px] leading-relaxed text-[#1d1d1f]">
-            이 기기에서 비밀번호 기억하기
+            기억하기
             <span className="mt-0.5 block text-[12px] text-[#86868b]">
-              켜면 다음부터 비밀번호 없이 바로 열립니다. 끄면 열 때마다
-              입력합니다.
+              체크하면 다음에 가계부를 열 때 비밀번호 없이 바로 들어갑니다.
+              체크하지 않으면 열 때마다 비밀번호를 묻습니다.
             </span>
           </span>
         </label>
