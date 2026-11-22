@@ -12,30 +12,32 @@ export function looksLikeTotalExpenseQuestion(text: string) {
   const t = text.trim();
   if (!t || hasExpenseAmount(t)) return false;
   const compact = t.replace(/\s+/g, "");
-
-  // 특정 분류를 콕 집어 물은 경우는 총지출이 아님 (예: 담배 얼마, 주류 합계)
-  // → 호출측에서 후보가 있어도, 아래 총지출 신호가 더 분명하면 총지출로 처리
-
-  const hasTotalCue =
-    /(총\s*지출|지출\s*합계|지출\s*총액|총액|전체\s*지출|모두\s*얼마|다\s*합쳐|총지출)/.test(
+  return (
+    /(총\s*지출|지출\s*합계|지출\s*총액|총액|전체\s*지출|모두\s*얼마|다\s*합쳐)/.test(
       t,
     ) ||
-    /총지출|지출합계|지출총액|전체지출/.test(compact);
-
-  const hasMonthTotalCue =
-    /(이번|저번|지난)\s*달\s*(의\s*)?(총\s*)?(지출|합계|얼마)/.test(t) ||
-    /(이번달|저번달|지난달)(의)?(총)?(지출|합계|얼마)/.test(compact);
-
-  const isShortTotalAsk =
-    /^(이번달|저번달|지난달)?(의)?(총)?(지출|합계|얼마)(이|가|은|는)?(야|에요|예요|인가요|인가|지|얼마|얼마야|알려줘|보여줘)?\??$/.test(
+    /(이번|저번|지난)\s*달\s*(총\s*)?(지출|합계|얼마)/.test(t) ||
+    /^(이번달|저번달|지난달)?(의)?(총)?(지출|합계|얼마)(야|에요|예요|인가요|인가|지)?\??$/.test(
       compact,
-    );
-
-  return hasTotalCue || hasMonthTotalCue || isShortTotalAsk;
+    ) ||
+    /^총지출/.test(compact) ||
+    (/얼마(야|에요|예요|인가요)?\??$/.test(compact) &&
+      /(이번달|저번달|지난달|총|합계|지출)/.test(compact))
+  );
 }
 
 function norm(s: string) {
   return s.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+/** 질문에서 분류 핵심어만 남깁니다. */
+export function statsQueryCore(text: string) {
+  return norm(text)
+    .replace(
+      /(총\s*)?지출|얼마|얼마나|합계|알려줘|알려\s*줘|보여줘|보여\s*줘|이번\s*달|저번\s*달|지난\s*달|\?|？/g,
+      "",
+    )
+    .trim();
 }
 
 /** 질문 속 동의어 → 대분류 */
@@ -58,20 +60,13 @@ const CATEGORY_ALIASES: Record<string, string> = {
 
 /**
  * 질문에서 대·소분류 후보를 찾습니다.
- * 정확히 하나면 확인용으로 돌려주고, 여러 개면 선택을 묻습니다.
+ * (확인 질문용 — 최종 해석은 resolveStatsCategory 를 쓰세요.)
  */
 export function findStatsCandidates(
   text: string,
   tree: CategoryTree,
 ): StatsCandidate[] {
-  const t = norm(text);
-  const queryCore = t
-    .replace(
-      /(총\s*)?지출|얼마|얼마나|합계|알려줘|알려\s*줘|보여줘|보여\s*줘|이번\s*달|저번\s*달|지난\s*달|\?|？/g,
-      "",
-    )
-    .trim();
-
+  const queryCore = statsQueryCore(text);
   if (!queryCore) return [];
 
   const found = new Map<string, StatsCandidate>();
@@ -86,14 +81,12 @@ export function findStatsCandidates(
     });
   }
 
-  // 동의어 → 대분류
   for (const [alias, category] of Object.entries(CATEGORY_ALIASES)) {
     if (queryCore.includes(norm(alias)) && category in tree) {
       add(category, null);
     }
   }
 
-  // 대분류 이름 포함
   for (const category of Object.keys(tree)) {
     if (category === "수입") continue;
     const c = norm(category);
@@ -102,7 +95,6 @@ export function findStatsCandidates(
     }
   }
 
-  // 소분류 이름 유사/부분 일치
   for (const [category, subs] of Object.entries(tree)) {
     if (category === "수입") continue;
     for (const sub of subs) {
@@ -118,8 +110,130 @@ export function findStatsCandidates(
     }
   }
 
-  // "여행"처럼 소분류에만 들어 있는 경우 대분류 단독 후보는 약하게 유지
   return [...found.values()];
+}
+
+/**
+ * 소분류 질문이면 해당 대분류로, 대분류 질문이면 그 대분류로 바로 해석합니다.
+ * 예: "가족식대 지출?" → 가족 (식대·가족_가족식대로 갈라지지 않음)
+ */
+export function resolveStatsCategory(
+  text: string,
+  tree: CategoryTree,
+):
+  | { kind: "category"; category: string }
+  | { kind: "ambiguous"; candidates: StatsCandidate[] }
+  | { kind: "none" } {
+  const queryCore = statsQueryCore(text);
+  if (!queryCore || queryCore.length < 2) return { kind: "none" };
+
+  // 1) 질문 핵심이 대분류명·동의어와 정확히 같으면 그 대분류
+  //    예: "식대?" → 식대 (가족식대/기타식대로 갈리지 않음)
+  for (const [alias, category] of Object.entries(CATEGORY_ALIASES)) {
+    if (queryCore === norm(alias) && category in tree) {
+      return { kind: "category", category };
+    }
+  }
+  for (const category of Object.keys(tree)) {
+    if (category === "수입") continue;
+    if (queryCore === norm(category)) {
+      return { kind: "category", category };
+    }
+  }
+
+  type SubHit = { category: string; subcategory: string; score: number };
+
+  // 2) 강한 소분류: 정확히 같거나 질문에 소분류 전체 포함
+  //    예: "가족식대 지출?" / "AI구독?"
+  const strongSubs: SubHit[] = [];
+  for (const [category, subs] of Object.entries(tree)) {
+    if (category === "수입") continue;
+    for (const sub of subs) {
+      const s = norm(sub);
+      if (!s) continue;
+      let score = 0;
+      if (queryCore === s) score = 100;
+      else if (queryCore.includes(s)) score = 80 + s.length;
+      else continue;
+      strongSubs.push({ category, subcategory: sub, score });
+    }
+  }
+  if (strongSubs.length > 0) {
+    strongSubs.sort((a, b) => b.score - a.score);
+    const best = strongSubs[0];
+    const top = strongSubs.filter((h) => h.score === best.score);
+    const categories = [...new Set(top.map((h) => h.category))];
+    if (categories.length === 1) {
+      return { kind: "category", category: categories[0] };
+    }
+    return {
+      kind: "ambiguous",
+      candidates: top.map((h) => ({
+        category: h.category,
+        subcategory: h.subcategory,
+        label: `${h.category}_${h.subcategory}`,
+      })),
+    };
+  }
+
+  // 3) 질문에 대분류명·동의어 포함
+  const catHits = new Set<string>();
+  for (const [alias, category] of Object.entries(CATEGORY_ALIASES)) {
+    if (queryCore.includes(norm(alias)) && category in tree) {
+      catHits.add(category);
+    }
+  }
+  for (const category of Object.keys(tree)) {
+    if (category === "수입") continue;
+    const c = norm(category);
+    if (queryCore.includes(c) || c.includes(queryCore)) {
+      catHits.add(category);
+    }
+  }
+  if (catHits.size === 1) {
+    return { kind: "category", category: [...catHits][0] };
+  }
+  if (catHits.size > 1) {
+    return {
+      kind: "ambiguous",
+      candidates: [...catHits].map((category) => ({
+        category,
+        subcategory: null,
+        label: category,
+      })),
+    };
+  }
+
+  // 4) 약한 소분류: 소분류가 질문 핵심을 포함
+  const weakSubs: SubHit[] = [];
+  for (const [category, subs] of Object.entries(tree)) {
+    if (category === "수입") continue;
+    for (const sub of subs) {
+      const s = norm(sub);
+      if (!s || !s.includes(queryCore)) continue;
+      weakSubs.push({
+        category,
+        subcategory: sub,
+        score: 40 + queryCore.length,
+      });
+    }
+  }
+  if (weakSubs.length > 0) {
+    const categories = [...new Set(weakSubs.map((h) => h.category))];
+    if (categories.length === 1) {
+      return { kind: "category", category: categories[0] };
+    }
+    return {
+      kind: "ambiguous",
+      candidates: weakSubs.map((h) => ({
+        category: h.category,
+        subcategory: h.subcategory,
+        label: `${h.category}_${h.subcategory}`,
+      })),
+    };
+  }
+
+  return { kind: "none" };
 }
 
 export function formatStatsConfirmQuestion(candidates: StatsCandidate[]) {
@@ -147,7 +261,6 @@ export function pickStatsCandidate(
   const t = norm(text);
   if (!t) return null;
 
-  // 네/맞아요 + 후보 1개
   if (
     candidates.length === 1 &&
     /^(네|예|응|어|ㅇㅇ|맞아|맞아요|맞습니다|그래|그래요|좋아|좋아요|ok|yes)$/i.test(

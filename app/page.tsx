@@ -85,10 +85,10 @@ import {
   summarizeBySubcategory,
 } from "@/lib/reports";
 import {
-  findStatsCandidates,
   formatStatsConfirmQuestion,
   looksLikeTotalExpenseQuestion,
   pickStatsCandidate,
+  resolveStatsCategory,
   type StatsCandidate,
 } from "@/lib/statsMatch";
 import {
@@ -1997,25 +1997,30 @@ export default function Home() {
           text,
           currentMonth || koreaToday().slice(0, 7),
         );
-        const candidates = findStatsCandidates(text, categoryTree);
+        const today = todayMax || koreaToday();
+        const rows = expenses.filter((item) => item.date <= today);
+        const resolved = resolveStatsCategory(text, categoryTree);
+
+        // 소분류·대분류가 해석되면 확인 없이 대분류 전체 소분류를 바로 답변
+        if (resolved.kind === "category") {
+          pushAssistant(
+            formatStatsBreakdownReply(rows, monthKey, resolved.category),
+          );
+          return;
+        }
 
         // 총지출·합계 질문은 확인 없이 바로 답변
-        if (candidates.length === 0 && looksLikeTotalExpenseQuestion(text)) {
-          const today = todayMax || koreaToday();
-          const rows = expenses.filter((item) => item.date <= today);
+        if (
+          resolved.kind === "none" &&
+          looksLikeTotalExpenseQuestion(text)
+        ) {
           pushAssistant(formatStatsBreakdownReply(rows, monthKey));
           return;
         }
 
-        if (candidates.length === 0) {
-          setPendingPhase("await_stats_confirm");
-          setPendingStatsMonth(monthKey);
-          setPendingStatsCandidates([]);
-          pushAssistant(formatStatsConfirmQuestion([]));
-          return;
-        }
-
-        // 분류별 질문은 확인 후 금액 답변
+        // 여러 분류로 갈리면 그때만 선택 질문
+        const candidates =
+          resolved.kind === "ambiguous" ? resolved.candidates : [];
         setPendingPhase("await_stats_confirm");
         setPendingStatsMonth(monthKey);
         setPendingStatsCandidates(candidates);
