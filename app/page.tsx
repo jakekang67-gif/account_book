@@ -435,6 +435,8 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  /** 전송 시 포커스를 옮겨 모바일 키보드를 내리기 위한 숨김 대상 */
+  const keyboardDismissRef = useRef<HTMLButtonElement>(null);
   const budgetAlertReadyRef = useRef(false);
   const budgetWasOverRef = useRef(false);
 
@@ -809,23 +811,32 @@ export default function Home() {
     });
   }
 
-  /** 모바일에서 키보드를 내리고, 닫힌 뒤 최신 대화가 보이게 스크롤 */
-  function releaseChatKeyboard() {
+  /** 모바일에서 키보드를 강제로 내리고, 닫힌 뒤 최신 대화가 보이게 스크롤 */
+  function forceDismissKeyboard() {
     const input = inputRef.current;
     if (input) {
-      // iOS 등에서 blur만으로 키보드가 안 내려가는 경우 대비
-      input.readOnly = true;
       input.blur();
-      window.setTimeout(() => {
-        input.readOnly = false;
-      }, 0);
+      input.readOnly = true;
+      // disabled 전환이 iOS에서 키보드를 더 잘 닫음
+      input.disabled = true;
     }
+    keyboardDismissRef.current?.focus();
     if (
       typeof document !== "undefined" &&
-      document.activeElement instanceof HTMLElement
+      document.activeElement instanceof HTMLElement &&
+      document.activeElement === input
     ) {
       document.activeElement.blur();
     }
+    window.setTimeout(() => {
+      if (!input) return;
+      input.disabled = false;
+      input.readOnly = false;
+    }, 50);
+  }
+
+  function releaseChatKeyboard() {
+    forceDismissKeyboard();
 
     const reveal = () => scrollChatToBottom("auto");
     reveal();
@@ -1691,11 +1702,8 @@ export default function Home() {
     const text = (overrideText ?? input).trim();
     if (!text || sending) return;
 
-    /** 저장 확인처럼 바로 답을 쳐야 할 때만 키보드 유지 */
-    let keepKeyboardOpen = false;
-
-    // 전송 즉시 키보드부터 내림 (총지출 답변 등이 가려지지 않게)
-    inputRef.current?.blur();
+    // 전송 즉시 키보드부터 내림 (답변이 가려지지 않게)
+    forceDismissKeyboard();
 
     const alreadyAppended = skipNextUserAppendRef.current;
     skipNextUserAppendRef.current = false;
@@ -1793,7 +1801,6 @@ export default function Home() {
 
         const picked = pickStatsCandidate(text, pendingStatsCandidates);
         if (!picked) {
-          keepKeyboardOpen = true;
           pushAssistant(formatStatsConfirmQuestion(pendingStatsCandidates));
           return;
         }
@@ -1982,7 +1989,6 @@ export default function Home() {
         }
 
         if (candidates.length === 0) {
-          keepKeyboardOpen = true;
           setPendingPhase("await_stats_confirm");
           setPendingStatsMonth(monthKey);
           setPendingStatsCandidates([]);
@@ -1991,7 +1997,6 @@ export default function Home() {
         }
 
         // 분류별 질문은 확인 후 금액 답변
-        keepKeyboardOpen = true;
         setPendingPhase("await_stats_confirm");
         setPendingStatsMonth(monthKey);
         setPendingStatsCandidates(candidates);
@@ -2032,7 +2037,6 @@ export default function Home() {
           subcategory: data.expense.subcategory,
           sourceMessageId,
         };
-        keepKeyboardOpen = true;
         setPendingExpense(next);
         setPendingPhase("confirm");
         pushAssistant(formatAskConfirmReply(next));
@@ -2066,11 +2070,8 @@ export default function Home() {
       if (!pageLeavingRef.current) {
         preserveSendingDraftRef.current = false;
       }
-      if (keepKeyboardOpen) {
-        inputRef.current?.focus();
-      } else {
-        releaseChatKeyboard();
-      }
+      // 전송 후에는 키보드를 항상 내림 (다시 쓰려면 입력칸을 탭)
+      releaseChatKeyboard();
     }
   }
 
@@ -2535,12 +2536,20 @@ export default function Home() {
               )}
               <form
                 onSubmit={(e) => {
-                  // 전송/저장 버튼 누르자마자 키보드 내리기
-                  inputRef.current?.blur();
+                  e.preventDefault();
+                  forceDismissKeyboard();
                   void handleSend(e);
                 }}
                 className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-1.5 pb-1.5"
               >
+                {/* 포커스 이동용 — 키보드 내리기 */}
+                <button
+                  ref={keyboardDismissRef}
+                  type="button"
+                  tabIndex={-1}
+                  aria-hidden
+                  className="pointer-events-none fixed h-px w-px opacity-0"
+                />
                 <VoiceMicButton
                   disabled={sending}
                   onError={(message) => setChatError(message)}
@@ -2556,6 +2565,7 @@ export default function Home() {
                         );
                         return;
                       }
+                      forceDismissKeyboard();
                       void handleSend(undefined, payload);
                       return;
                     }
@@ -2565,6 +2575,7 @@ export default function Home() {
                         pendingPhase === "await_stats_confirm") &&
                       isAffirmative(trimmed)
                     ) {
+                      forceDismissKeyboard();
                       void handleSend(undefined, trimmed);
                       return;
                     }
@@ -2579,11 +2590,23 @@ export default function Home() {
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="예:오늘 커피 5000원"
                   disabled={sending}
+                  enterKeyHint="send"
                   className="min-h-9 min-w-0 w-full rounded-2xl bg-[#f5f5f7] px-3 py-1.5 text-[14px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed] disabled:opacity-60 sm:px-4"
                 />
                 <button
-                  type="submit"
+                  type="button"
                   disabled={sending || !input.trim()}
+                  onPointerDown={(e) => {
+                    // iOS: 손가락이 닿는 순간(click 전)에 키보드를 내려야 함
+                    e.preventDefault();
+                    forceDismissKeyboard();
+                  }}
+                  onPointerUp={(e) => {
+                    e.preventDefault();
+                    if (sending || !input.trim()) return;
+                    forceDismissKeyboard();
+                    void handleSend();
+                  }}
                   className="min-h-9 shrink-0 rounded-2xl bg-[#1d1d1f] px-3 py-1.5 text-[13px] font-medium text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-35 sm:px-4"
                 >
                   전송
