@@ -1,7 +1,10 @@
 "use client";
 
 import { koreaToday } from "@/lib/date";
-import { noAutofillProps } from "@/lib/noAutofill";
+import {
+  AutofillDecoys,
+  NoAutofillInput,
+} from "@/components/NoAutofillField";
 
 type SaveExpenseToDateDialogProps = {
   open: boolean;
@@ -49,33 +52,34 @@ export function SaveExpenseToDateDialog({
           기존 내역은 그대로 둡니다. · {description}
         </p>
 
-        <label className="mt-4 block">
-          <span className="mb-1.5 block text-[13px] text-[#86868b]">날짜</span>
-          <input
-            {...noAutofillProps}
-            type="date"
-            name="save-to-date"
-            value={dateValue || today}
-            max={today}
-            onChange={(e) => onDateChange(e.target.value)}
-            className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]"
-          />
-        </label>
+        <div className="relative mt-4">
+          <AutofillDecoys />
+          <label className="block">
+            <span className="mb-1.5 block text-[13px] text-[#86868b]">날짜</span>
+            <NoAutofillInput
+              type="date"
+              name="save-to-date"
+              value={dateValue || today}
+              max={today}
+              onChange={(e) => onDateChange(e.target.value)}
+              className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]"
+            />
+          </label>
 
-        <label className="mt-3 block">
-          <span className="mb-1.5 block text-[13px] text-[#86868b]">금액</span>
-          <input
-            {...noAutofillProps}
-            type="number"
-            inputMode="numeric"
-            name="save-to-amount"
-            min="1"
-            value={amountValue}
-            onChange={(e) => onAmountChange(e.target.value)}
-            className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] tabular-nums text-[#1d1d1f] outline-none focus:bg-[#ebebed] [font-feature-settings:'zero'_0]"
-            placeholder="금액"
-          />
-        </label>
+          <label className="mt-3 block">
+            <span className="mb-1.5 block text-[13px] text-[#86868b]">금액</span>
+            <NoAutofillInput
+              type="number"
+              inputMode="numeric"
+              name="save-to-amount"
+              min="1"
+              value={amountValue}
+              onChange={(e) => onAmountChange(e.target.value)}
+              className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] tabular-nums text-[#1d1d1f] outline-none focus:bg-[#ebebed] [font-feature-settings:'zero'_0]"
+              placeholder="금액"
+            />
+          </label>
+        </div>
 
         <div className="mt-4 flex gap-2">
           <button

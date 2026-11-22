@@ -4,7 +4,11 @@ import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { InstallHelp } from "@/components/InstallHelp";
 import { getRememberLogin, getSavedEmail } from "@/lib/authStorage";
-import { noAutofillFormProps, noAutofillProps } from "@/lib/noAutofill";
+import {
+  AutofillDecoys,
+  NoAutofillInput,
+} from "@/components/NoAutofillField";
+import { noAutofillFormProps } from "@/lib/noAutofill";
 
 type Mode = "login" | "signup";
 
@@ -92,37 +96,38 @@ export function LoginForm() {
           onSubmit={handleSubmit}
           className="mt-5 space-y-3"
         >
-          <label className="block">
-            <span className="mb-1 block px-0.5 text-[12px] text-[#86868b]">
-              이메일
-            </span>
-            <input
-              {...noAutofillProps}
-              type="email"
-              name="account-book-login-email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={busy}
-              className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]"
-              placeholder="you@example.com"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block px-0.5 text-[12px] text-[#86868b]">
-              비밀번호
-            </span>
-            <input
-              {...noAutofillProps}
-              type="text"
-              name="account-book-login-secret"
-              inputMode="text"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={busy}
-              className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed] [-webkit-text-security:disc]"
-              placeholder="6자 이상"
-            />
-          </label>
+          <div className="relative space-y-3">
+            <AutofillDecoys />
+            <label className="block">
+              <span className="mb-1 block px-0.5 text-[12px] text-[#86868b]">
+                이메일
+              </span>
+              <NoAutofillInput
+                type="email"
+                name="account-book-login-email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={busy}
+                className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]"
+                placeholder="you@example.com"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block px-0.5 text-[12px] text-[#86868b]">
+                비밀번호
+              </span>
+              <NoAutofillInput
+                type="text"
+                name="account-book-login-secret"
+                inputMode="text"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={busy}
+                className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed] [-webkit-text-security:disc]"
+                placeholder="6자 이상"
+              />
+            </label>
+          </div>
 
           <label className="flex items-center gap-2 px-0.5 py-1">
             <input

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { noAutofillProps } from "@/lib/noAutofill";
+import { NoAutofillInput } from "@/components/NoAutofillField";
 
 export type PurchaseHistoryItem = {
   id: number;
@@ -184,8 +184,7 @@ export function PurchaseHistorySheet({
 
         {mode === "search" && (
           <div className="shrink-0 px-4 pt-3">
-            <input
-              {...noAutofillProps}
+            <NoAutofillInput
               type="search"
               name="purchase-history-search"
               value={query}

@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 import type { CategoryTree } from "@/lib/categories";
 import { koreaToday } from "@/lib/date";
-import { noAutofillFormProps, noAutofillProps } from "@/lib/noAutofill";
+import {
+  AutofillDecoys,
+  NoAutofillInput,
+} from "@/components/NoAutofillField";
+import { noAutofillFormProps } from "@/lib/noAutofill";
 
 type ManualExpenseFormProps = {
   categoryTree: CategoryTree;
@@ -106,22 +110,23 @@ export function ManualExpenseForm({
 
       <label className="block">
         <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">날짜</span>
-        <input
-          {...noAutofillProps}
-          type="date"
-          name="manual-expense-date"
-          value={date}
-          max={todayMax || undefined}
-          onChange={(e) => setDate(e.target.value)}
-          className={fieldClass}
-          disabled={busy}
-        />
+        <div className="relative">
+          <AutofillDecoys />
+          <NoAutofillInput
+            type="date"
+            name="manual-expense-date"
+            value={date}
+            max={todayMax || undefined}
+            onChange={(e) => setDate(e.target.value)}
+            className={fieldClass}
+            disabled={busy}
+          />
+        </div>
       </label>
 
       <label className="block">
         <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">금액</span>
-        <input
-          {...noAutofillProps}
+        <NoAutofillInput
           type="number"
           inputMode="numeric"
           name="manual-expense-amount"
@@ -136,8 +141,7 @@ export function ManualExpenseForm({
 
       <label className="block">
         <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">내용</span>
-        <input
-          {...noAutofillProps}
+        <NoAutofillInput
           name="manual-expense-description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}

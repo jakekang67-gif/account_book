@@ -59,7 +59,11 @@ import {
 } from "@/lib/chatIntent";
 import { normalizeExpenseDescription } from "@/lib/expenseDescription";
 import { koreaToday } from "@/lib/date";
-import { noAutofillProps } from "@/lib/noAutofill";
+import {
+  AutofillDecoys,
+  NoAutofillInput,
+  NoAutofillTextarea,
+} from "@/components/NoAutofillField";
 import {
   collectRecurringReminders,
   ensureNotificationPermission,
@@ -2406,8 +2410,7 @@ export default function Home() {
                           : "rounded-bl-md bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
                       } ring-2 ring-[#1d1d1f] ring-offset-2 ring-offset-[#f5f5f7]`}
                     >
-                      <textarea
-                        {...noAutofillProps}
+                      <NoAutofillTextarea
                         name="chat-edit-draft"
                         value={editDraft}
                         onChange={(e) => setEditDraft(e.target.value)}
@@ -2565,8 +2568,9 @@ export default function Home() {
                   forceDismissKeyboard();
                   void handleSend(e);
                 }}
-                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-1.5 pb-1.5"
+                className="relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-1.5 pb-1.5"
               >
+                <AutofillDecoys />
                 {/* 포커스 이동용 — 키보드 내리기 */}
                 <button
                   ref={keyboardDismissRef}
@@ -2608,8 +2612,7 @@ export default function Home() {
                     inputRef.current?.focus();
                   }}
                 />
-                <textarea
-                  {...noAutofillProps}
+                <NoAutofillTextarea
                   ref={inputRef}
                   name="account-book-chat-message"
                   rows={1}
@@ -2929,9 +2932,9 @@ export default function Home() {
           if (!editForm) return null;
           const isBusy = busyId === editingId;
           return (
-            <div className="space-y-2">
-              <input
-                {...noAutofillProps}
+            <div className="relative space-y-2">
+              <AutofillDecoys />
+              <NoAutofillInput
                 type="date"
                 name="expense-edit-date"
                 value={editForm.date}
@@ -2943,8 +2946,7 @@ export default function Home() {
                 disabled={!!isBusy}
                 lang="ko-KR"
               />
-              <input
-                {...noAutofillProps}
+              <NoAutofillInput
                 type="number"
                 inputMode="numeric"
                 name="expense-edit-amount"
@@ -2957,8 +2959,7 @@ export default function Home() {
                 disabled={!!isBusy}
                 placeholder="금액"
               />
-              <input
-                {...noAutofillProps}
+              <NoAutofillInput
                 type="text"
                 name="expense-edit-description"
                 value={editForm.description}

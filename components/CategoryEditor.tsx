@@ -9,7 +9,11 @@ import {
   deleteSubcategory,
 } from "@/lib/categoryStore";
 import type { CategoryTree } from "@/lib/categories";
-import { noAutofillFormProps, noAutofillProps } from "@/lib/noAutofill";
+import {
+  AutofillDecoys,
+  NoAutofillInput,
+} from "@/components/NoAutofillField";
+import { noAutofillFormProps } from "@/lib/noAutofill";
 
 type CategoryEditorProps = {
   open: boolean;
@@ -133,9 +137,9 @@ export function CategoryEditor({
             className="space-y-2"
           >
             <p className="text-[13px] font-medium text-[#1d1d1f]">대분류 추가</p>
-            <div className="flex gap-2">
-              <input
-                {...noAutofillProps}
+            <div className="relative flex gap-2">
+              <AutofillDecoys />
+              <NoAutofillInput
                 name="category-new-name"
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
@@ -189,9 +193,9 @@ export function CategoryEditor({
             className="space-y-2"
           >
             <p className="text-[13px] font-medium text-[#1d1d1f]">소분류 추가</p>
-            <div className="flex gap-2">
-              <input
-                {...noAutofillProps}
+            <div className="relative flex gap-2">
+              <AutofillDecoys />
+              <NoAutofillInput
                 name="subcategory-new-name"
                 value={newSubcategory}
                 onChange={(e) => setNewSubcategory(e.target.value)}

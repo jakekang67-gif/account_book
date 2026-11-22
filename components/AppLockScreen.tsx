@@ -7,7 +7,11 @@ import {
   unlockAppLockSession,
   verifyAppLockPin,
 } from "@/lib/appLock";
-import { noAutofillFormProps, noAutofillProps } from "@/lib/noAutofill";
+import {
+  AutofillDecoys,
+  NoAutofillInput,
+} from "@/components/NoAutofillField";
+import { noAutofillFormProps } from "@/lib/noAutofill";
 
 type AppLockScreenProps = {
   mode: "setup" | "unlock";
@@ -74,20 +78,22 @@ export function AppLockScreen({ mode, onUnlocked }: AppLockScreenProps) {
           <span className="mb-1.5 block text-[13px] text-[#86868b]">
             비밀번호 (숫자 4~8자리)
           </span>
-          <input
-            {...noAutofillProps}
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            name="app-lock-pin"
-            value={pin}
-            onChange={(e) =>
-              setPin(e.target.value.replace(/\D/g, "").slice(0, 8))
-            }
-            className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed] [-webkit-text-security:disc]"
-            disabled={busy}
-            autoFocus
-          />
+          <div className="relative">
+            <AutofillDecoys />
+            <NoAutofillInput
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              name="app-lock-pin"
+              value={pin}
+              onChange={(e) =>
+                setPin(e.target.value.replace(/\D/g, "").slice(0, 8))
+              }
+              className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed] [-webkit-text-security:disc]"
+              disabled={busy}
+              autoFocus
+            />
+          </div>
         </label>
 
         {mode === "setup" && (
@@ -95,8 +101,7 @@ export function AppLockScreen({ mode, onUnlocked }: AppLockScreenProps) {
             <span className="mb-1.5 block text-[13px] text-[#86868b]">
               비밀번호 확인
             </span>
-            <input
-              {...noAutofillProps}
+            <NoAutofillInput
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"

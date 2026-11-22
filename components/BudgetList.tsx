@@ -3,7 +3,11 @@
 import { FormEvent, useEffect, useState } from "react";
 import type { MonthlyBudget } from "@/lib/budgetStore";
 import { playBudgetWarningSound } from "@/lib/budgetAlert";
-import { noAutofillFormProps, noAutofillProps } from "@/lib/noAutofill";
+import {
+  AutofillDecoys,
+  NoAutofillInput,
+} from "@/components/NoAutofillField";
+import { noAutofillFormProps } from "@/lib/noAutofill";
 import { formatMonthLabel } from "@/lib/reports";
 
 type BudgetListProps = {
@@ -105,9 +109,9 @@ export function BudgetList({
             <p className="mt-0.5 text-[12px] text-[#86868b]">
               이번 달 지출이 이 비율에 처음 도달하면 경고음이 납니다.
             </p>
-            <div className="mt-2.5 flex items-center gap-2">
-              <input
-                {...noAutofillProps}
+            <div className="relative mt-2.5 flex items-center gap-2">
+              <AutofillDecoys />
+              <NoAutofillInput
                 type="text"
                 inputMode="numeric"
                 name="budget-alert-percent"

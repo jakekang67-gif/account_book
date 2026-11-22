@@ -1,7 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { noAutofillFormProps, noAutofillProps } from "@/lib/noAutofill";
+import {
+  AutofillDecoys,
+  NoAutofillInput,
+} from "@/components/NoAutofillField";
+import { noAutofillFormProps } from "@/lib/noAutofill";
 import { formatMonthLabel } from "@/lib/reports";
 
 type BudgetEditorProps = {
@@ -88,22 +92,24 @@ export function BudgetEditor({
           onSubmit={(e) => void handleSubmit(e)}
           className="mt-4 space-y-3"
         >
-          <label className="block">
-            <span className="mb-1 block text-[12px] text-[#86868b]">
-              예산 금액 (원)
-            </span>
-            <input
-              {...noAutofillProps}
-              type="text"
-              inputMode="numeric"
-              name="budget-month-amount"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              disabled={busy}
-              placeholder="예: 1000000"
-              className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]"
-            />
-          </label>
+          <div className="relative">
+            <AutofillDecoys />
+            <label className="block">
+              <span className="mb-1 block text-[12px] text-[#86868b]">
+                예산 금액 (원)
+              </span>
+              <NoAutofillInput
+                type="text"
+                inputMode="numeric"
+                name="budget-month-amount"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                disabled={busy}
+                placeholder="예: 1000000"
+                className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]"
+              />
+            </label>
+          </div>
 
           {error && (
             <p className="text-[12px] leading-relaxed text-red-600">{error}</p>

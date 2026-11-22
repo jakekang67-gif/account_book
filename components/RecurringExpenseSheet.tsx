@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CategoryTree } from "@/lib/categories";
 import { koreaToday } from "@/lib/date";
-import { noAutofillFormProps, noAutofillProps } from "@/lib/noAutofill";
+import {
+  AutofillDecoys,
+  NoAutofillInput,
+} from "@/components/NoAutofillField";
+import { noAutofillFormProps } from "@/lib/noAutofill";
 import type { RecurringExpense } from "@/lib/recurringStore";
 
 type RecurringExpenseSheetProps = {
@@ -339,9 +343,9 @@ export function RecurringExpenseSheet({
             >
               {editingId ? "정기 지출 수정" : "정기 지출 추가"}
             </p>
-            <div className="space-y-2.5">
-              <input
-                {...noAutofillProps}
+            <div className="relative space-y-2.5">
+              <AutofillDecoys />
+              <NoAutofillInput
                 name="recurring-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -350,8 +354,7 @@ export function RecurringExpenseSheet({
                 disabled={busy}
                 autoFocus
               />
-              <input
-                {...noAutofillProps}
+              <NoAutofillInput
                 type="number"
                 inputMode="numeric"
                 name="recurring-amount"
@@ -393,8 +396,7 @@ export function RecurringExpenseSheet({
                   주기 (개월 수 직접 입력)
                 </span>
                 <div className="flex items-center gap-2">
-                  <input
-                    {...noAutofillProps}
+                  <NoAutofillInput
                     type="number"
                     inputMode="numeric"
                     name="recurring-interval"
@@ -415,8 +417,7 @@ export function RecurringExpenseSheet({
                 <span className="mb-1 block text-[12px] text-[#86868b]">
                   시작일
                 </span>
-                <input
-                  {...noAutofillProps}
+                <NoAutofillInput
                   type="date"
                   name="recurring-start-date"
                   value={startDate}
