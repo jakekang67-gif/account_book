@@ -87,7 +87,7 @@ export function ChatNoticeBanner({
             saveDismissedNoticeId(notice.id);
             setVisible(false);
           }}
-          className="shrink-0 rounded-lg px-2 py-0.5 text-[12px] text-[#86868b] hover:bg-black/5"
+          className="shrink-0 rounded-lg px-2 py-0.5 text-[12px] font-medium text-[#b42318] hover:bg-black/5"
         >
           닫기
         </button>
