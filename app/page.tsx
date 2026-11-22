@@ -435,7 +435,7 @@ export default function Home() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   /** 전송 시 포커스를 옮겨 모바일 키보드를 내리기 위한 숨김 대상 */
   const keyboardDismissRef = useRef<HTMLButtonElement>(null);
   const budgetAlertReadyRef = useRef(false);
@@ -2600,10 +2600,10 @@ export default function Home() {
                     inputRef.current?.focus();
                   }}
                 />
-                <input
+                <textarea
                   ref={inputRef}
-                  type="text"
-                  name="account-book-chat"
+                  name="account-book-chat-message"
+                  rows={1}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="예:오늘 커피 5000원"
@@ -2611,12 +2611,21 @@ export default function Home() {
                   enterKeyHint="send"
                   autoComplete="off"
                   autoCorrect="off"
-                  autoCapitalize="sentences"
+                  autoCapitalize="none"
                   spellCheck={false}
+                  inputMode="text"
                   data-form-type="other"
                   data-lpignore="true"
                   data-1p-ignore="true"
-                  className="min-h-9 min-w-0 w-full rounded-2xl bg-[#f5f5f7] px-3 py-1.5 text-[14px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed] disabled:opacity-60 sm:px-4"
+                  data-bwignore="true"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      forceDismissKeyboard();
+                      void handleSend();
+                    }
+                  }}
+                  className="min-h-9 max-h-24 min-w-0 w-full resize-none rounded-2xl bg-[#f5f5f7] px-3 py-1.5 text-[14px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed] disabled:opacity-60 sm:px-4"
                 />
           <button
                   type="button"
