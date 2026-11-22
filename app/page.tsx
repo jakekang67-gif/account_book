@@ -798,8 +798,46 @@ export default function Home() {
     const el = chatScrollRef.current;
     if (!el) return;
     requestAnimationFrame(() => {
-      el.scrollTo({ top: el.scrollHeight, behavior });
+      el.scrollTop = el.scrollHeight;
+      if (behavior === "smooth") {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      }
+      messagesEndRef.current?.scrollIntoView({
+        behavior,
+        block: "end",
+      });
     });
+  }
+
+  /** 모바일에서 키보드를 내리고, 닫힌 뒤 최신 대화가 보이게 스크롤 */
+  function releaseChatKeyboard() {
+    const input = inputRef.current;
+    if (input) {
+      // iOS 등에서 blur만으로 키보드가 안 내려가는 경우 대비
+      input.readOnly = true;
+      input.blur();
+      window.setTimeout(() => {
+        input.readOnly = false;
+      }, 0);
+    }
+    if (
+      typeof document !== "undefined" &&
+      document.activeElement instanceof HTMLElement
+    ) {
+      document.activeElement.blur();
+    }
+
+    const reveal = () => scrollChatToBottom("auto");
+    reveal();
+    window.setTimeout(reveal, 120);
+    window.setTimeout(reveal, 350);
+    window.setTimeout(reveal, 650);
+
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => reveal();
+    vv.addEventListener("resize", onResize);
+    window.setTimeout(() => vv.removeEventListener("resize", onResize), 900);
   }
 
   useEffect(() => {
@@ -810,21 +848,16 @@ export default function Home() {
       return;
     }
     if (contextMessageId) return;
-    scrollChatToBottom(sending ? "auto" : "smooth");
-  }, [messages, sending, contextMessageId]);
-
-  // 모바일 키보드가 올라와도 최신 대화가 보이게
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const onResize = () => {
-      if (document.activeElement === inputRef.current) {
-        scrollChatToBottom("auto");
-      }
+    // 키보드 애니메이션 동안 여러 번 맞춰 스크롤
+    const t1 = window.setTimeout(() => scrollChatToBottom("auto"), 50);
+    const t2 = window.setTimeout(() => scrollChatToBottom("smooth"), 320);
+    const t3 = window.setTimeout(() => scrollChatToBottom("auto"), 600);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
     };
-    vv.addEventListener("resize", onResize);
-    return () => vv.removeEventListener("resize", onResize);
-  }, []);
+  }, [messages, sending, contextMessageId]);
 
   // 로그인 후 앱 잠금 여부 확인
   useEffect(() => {
@@ -1661,6 +1694,9 @@ export default function Home() {
     /** 저장 확인처럼 바로 답을 쳐야 할 때만 키보드 유지 */
     let keepKeyboardOpen = false;
 
+    // 전송 즉시 키보드부터 내림 (총지출 답변 등이 가려지지 않게)
+    inputRef.current?.blur();
+
     const alreadyAppended = skipNextUserAppendRef.current;
     skipNextUserAppendRef.current = false;
 
@@ -2033,8 +2069,7 @@ export default function Home() {
       if (keepKeyboardOpen) {
         inputRef.current?.focus();
       } else {
-        inputRef.current?.blur();
-        scrollChatToBottom("smooth");
+        releaseChatKeyboard();
       }
     }
   }
@@ -2499,7 +2534,11 @@ export default function Home() {
                 </p>
               )}
               <form
-                onSubmit={(e) => handleSend(e)}
+                onSubmit={(e) => {
+                  // 전송/저장 버튼 누르자마자 키보드 내리기
+                  inputRef.current?.blur();
+                  void handleSend(e);
+                }}
                 className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-1.5 pb-1.5"
               >
                 <VoiceMicButton
