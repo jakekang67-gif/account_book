@@ -2586,11 +2586,19 @@ export default function Home() {
                 <input
                   ref={inputRef}
                   type="text"
+                  name="account-book-chat"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="예:오늘 커피 5000원"
                   disabled={sending}
                   enterKeyHint="send"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-form-type="other"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
                   className="min-h-9 min-w-0 w-full rounded-2xl bg-[#f5f5f7] px-3 py-1.5 text-[14px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed] disabled:opacity-60 sm:px-4"
                 />
                 <button

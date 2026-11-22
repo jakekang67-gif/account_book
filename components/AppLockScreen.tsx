@@ -72,14 +72,22 @@ export function AppLockScreen({ mode, onUnlocked }: AppLockScreenProps) {
             비밀번호 (숫자 4~8자리)
           </span>
           <input
-            type="password"
+            type="text"
             inputMode="numeric"
-            autoComplete="off"
+            pattern="[0-9]*"
+            name="app-lock-pin"
+            autoComplete="one-time-code"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-form-type="other"
+            data-lpignore="true"
+            data-1p-ignore="true"
             value={pin}
             onChange={(e) =>
               setPin(e.target.value.replace(/\D/g, "").slice(0, 8))
             }
-            className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]"
+            className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed] [-webkit-text-security:disc]"
             disabled={busy}
             autoFocus
           />
@@ -91,14 +99,22 @@ export function AppLockScreen({ mode, onUnlocked }: AppLockScreenProps) {
               비밀번호 확인
             </span>
             <input
-              type="password"
+              type="text"
               inputMode="numeric"
-              autoComplete="off"
+              pattern="[0-9]*"
+              name="app-lock-pin-confirm"
+              autoComplete="one-time-code"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              data-form-type="other"
+              data-lpignore="true"
+              data-1p-ignore="true"
               value={pinConfirm}
               onChange={(e) =>
                 setPinConfirm(e.target.value.replace(/\D/g, "").slice(0, 8))
               }
-              className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]"
+              className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed] [-webkit-text-security:disc]"
               disabled={busy}
             />
           </label>

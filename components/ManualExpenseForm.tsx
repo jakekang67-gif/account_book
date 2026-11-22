@@ -120,6 +120,8 @@ export function ManualExpenseForm({
           type="number"
           inputMode="numeric"
           min="1"
+          name="manual-amount"
+          autoComplete="off"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="예: 10000"
@@ -131,6 +133,13 @@ export function ManualExpenseForm({
       <label className="block">
         <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">내용</span>
         <input
+          type="text"
+          name="manual-description"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          data-lpignore="true"
+          data-1p-ignore="true"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="내용 (예: 넷플릭스)"
