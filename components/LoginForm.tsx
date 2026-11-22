@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { InstallHelp } from "@/components/InstallHelp";
 import { getRememberLogin, getSavedEmail } from "@/lib/authStorage";
+import { noAutofillFormProps, noAutofillProps } from "@/lib/noAutofill";
 
 type Mode = "login" | "signup";
 
@@ -87,8 +88,7 @@ export function LoginForm() {
         </div>
 
         <form
-          autoComplete="off"
-          data-form-type="other"
+          {...noAutofillFormProps}
           onSubmit={handleSubmit}
           className="mt-5 space-y-3"
         >
@@ -97,16 +97,12 @@ export function LoginForm() {
               이메일
             </span>
             <input
+              {...noAutofillProps}
               type="email"
               name="account-book-login-email"
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={busy}
-              data-lpignore="true"
-              data-1p-ignore="true"
               className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]"
               placeholder="you@example.com"
             />
@@ -116,17 +112,13 @@ export function LoginForm() {
               비밀번호
             </span>
             <input
+              {...noAutofillProps}
               type="text"
               name="account-book-login-secret"
               inputMode="text"
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={busy}
-              data-lpignore="true"
-              data-1p-ignore="true"
               className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:bg-[#ebebed] [-webkit-text-security:disc]"
               placeholder="6자 이상"
             />

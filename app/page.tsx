@@ -59,6 +59,7 @@ import {
 } from "@/lib/chatIntent";
 import { normalizeExpenseDescription } from "@/lib/expenseDescription";
 import { koreaToday } from "@/lib/date";
+import { noAutofillProps } from "@/lib/noAutofill";
 import {
   collectRecurringReminders,
   ensureNotificationPermission,
@@ -2406,6 +2407,8 @@ export default function Home() {
                       } ring-2 ring-[#1d1d1f] ring-offset-2 ring-offset-[#f5f5f7]`}
                     >
                       <textarea
+                        {...noAutofillProps}
+                        name="chat-edit-draft"
                         value={editDraft}
                         onChange={(e) => setEditDraft(e.target.value)}
                         rows={3}
@@ -2606,6 +2609,7 @@ export default function Home() {
                   }}
                 />
                 <textarea
+                  {...noAutofillProps}
                   ref={inputRef}
                   name="account-book-chat-message"
                   rows={1}
@@ -2614,15 +2618,7 @@ export default function Home() {
                   placeholder="예:오늘 커피 5000원"
                   disabled={sending}
                   enterKeyHint="send"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="none"
-                  spellCheck={false}
                   inputMode="text"
-                  data-form-type="other"
-                  data-lpignore="true"
-                  data-1p-ignore="true"
-                  data-bwignore="true"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
@@ -2935,7 +2931,9 @@ export default function Home() {
           return (
             <div className="space-y-2">
               <input
+                {...noAutofillProps}
                 type="date"
+                name="expense-edit-date"
                 value={editForm.date}
                 max={todayMax || undefined}
                 onChange={(e) =>
@@ -2946,8 +2944,10 @@ export default function Home() {
                 lang="ko-KR"
               />
               <input
+                {...noAutofillProps}
                 type="number"
                 inputMode="numeric"
+                name="expense-edit-amount"
                 min="1"
                 value={editForm.amount}
                 onChange={(e) =>
@@ -2958,7 +2958,9 @@ export default function Home() {
                 placeholder="금액"
               />
               <input
+                {...noAutofillProps}
                 type="text"
+                name="expense-edit-description"
                 value={editForm.description}
                 onChange={(e) =>
                   setEditForm({
@@ -2971,6 +2973,7 @@ export default function Home() {
                 placeholder="내용"
               />
               <select
+                autoComplete="off"
                 value={editForm.category}
                 onChange={(e) =>
                   updateEditCategory(e.target.value as Category)
@@ -2985,6 +2988,7 @@ export default function Home() {
                 ))}
               </select>
               <select
+                autoComplete="off"
                 value={editForm.subcategory}
                 onChange={(e) =>
                   setEditForm({

@@ -1,6 +1,7 @@
 "use client";
 
 import { koreaToday } from "@/lib/date";
+import { noAutofillProps } from "@/lib/noAutofill";
 
 type SaveExpenseToDateDialogProps = {
   open: boolean;
@@ -51,7 +52,9 @@ export function SaveExpenseToDateDialog({
         <label className="mt-4 block">
           <span className="mb-1.5 block text-[13px] text-[#86868b]">날짜</span>
           <input
+            {...noAutofillProps}
             type="date"
+            name="save-to-date"
             value={dateValue || today}
             max={today}
             onChange={(e) => onDateChange(e.target.value)}
@@ -62,8 +65,10 @@ export function SaveExpenseToDateDialog({
         <label className="mt-3 block">
           <span className="mb-1.5 block text-[13px] text-[#86868b]">금액</span>
           <input
+            {...noAutofillProps}
             type="number"
             inputMode="numeric"
+            name="save-to-amount"
             min="1"
             value={amountValue}
             onChange={(e) => onAmountChange(e.target.value)}

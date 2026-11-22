@@ -9,6 +9,7 @@ import {
   deleteSubcategory,
 } from "@/lib/categoryStore";
 import type { CategoryTree } from "@/lib/categories";
+import { noAutofillFormProps, noAutofillProps } from "@/lib/noAutofill";
 
 type CategoryEditorProps = {
   open: boolean;
@@ -126,10 +127,16 @@ export function CategoryEditor({
         </div>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-          <form onSubmit={handleAddCategory} className="space-y-2">
+          <form
+            {...noAutofillFormProps}
+            onSubmit={handleAddCategory}
+            className="space-y-2"
+          >
             <p className="text-[13px] font-medium text-[#1d1d1f]">대분류 추가</p>
             <div className="flex gap-2">
               <input
+                {...noAutofillProps}
+                name="category-new-name"
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
                 placeholder="예: 여행"
@@ -176,10 +183,16 @@ export function CategoryEditor({
             </select>
           </div>
 
-          <form onSubmit={handleAddSubcategory} className="space-y-2">
+          <form
+            {...noAutofillFormProps}
+            onSubmit={handleAddSubcategory}
+            className="space-y-2"
+          >
             <p className="text-[13px] font-medium text-[#1d1d1f]">소분류 추가</p>
             <div className="flex gap-2">
               <input
+                {...noAutofillProps}
+                name="subcategory-new-name"
                 value={newSubcategory}
                 onChange={(e) => setNewSubcategory(e.target.value)}
                 placeholder="예: 항공권"

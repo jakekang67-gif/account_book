@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import type { MonthlyBudget } from "@/lib/budgetStore";
 import { playBudgetWarningSound } from "@/lib/budgetAlert";
+import { noAutofillFormProps, noAutofillProps } from "@/lib/noAutofill";
 import { formatMonthLabel } from "@/lib/reports";
 
 type BudgetListProps = {
@@ -94,6 +95,7 @@ export function BudgetList({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
           <form
+            {...noAutofillFormProps}
             onSubmit={handleSavePercent}
             className="mb-4 rounded-2xl bg-[#f5f5f7] px-3.5 py-3"
           >
@@ -105,8 +107,10 @@ export function BudgetList({
             </p>
             <div className="mt-2.5 flex items-center gap-2">
               <input
+                {...noAutofillProps}
                 type="text"
                 inputMode="numeric"
+                name="budget-alert-percent"
                 value={percentInput}
                 onChange={(e) => setPercentInput(e.target.value)}
                 className="w-20 rounded-xl bg-white px-3 py-2 text-center font-mono text-[15px] text-[#1d1d1f] outline-none ring-1 ring-black/5"

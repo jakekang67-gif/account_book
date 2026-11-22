@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { noAutofillFormProps, noAutofillProps } from "@/lib/noAutofill";
 import { formatMonthLabel } from "@/lib/reports";
 
 type BudgetEditorProps = {
@@ -82,14 +83,20 @@ export function BudgetEditor({
           {formatMonthLabel(month)} 예산을 입력해 주세요.
         </p>
 
-        <form onSubmit={(e) => void handleSubmit(e)} className="mt-4 space-y-3">
+        <form
+          {...noAutofillFormProps}
+          onSubmit={(e) => void handleSubmit(e)}
+          className="mt-4 space-y-3"
+        >
           <label className="block">
             <span className="mb-1 block text-[12px] text-[#86868b]">
               예산 금액 (원)
             </span>
             <input
+              {...noAutofillProps}
               type="text"
               inputMode="numeric"
+              name="budget-month-amount"
               value={value}
               onChange={(e) => setValue(e.target.value)}
               disabled={busy}

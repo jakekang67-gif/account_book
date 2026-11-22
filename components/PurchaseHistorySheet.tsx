@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { noAutofillProps } from "@/lib/noAutofill";
 
 export type PurchaseHistoryItem = {
   id: number;
@@ -184,13 +185,14 @@ export function PurchaseHistorySheet({
         {mode === "search" && (
           <div className="shrink-0 px-4 pt-3">
             <input
+              {...noAutofillProps}
               type="search"
+              name="purchase-history-search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="단어 입력 (예: 담배)"
               autoFocus
               enterKeyHint="search"
-              autoComplete="off"
               className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[14px] text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:bg-[#ebebed]"
             />
           </div>

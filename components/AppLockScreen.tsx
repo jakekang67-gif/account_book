@@ -7,6 +7,7 @@ import {
   unlockAppLockSession,
   verifyAppLockPin,
 } from "@/lib/appLock";
+import { noAutofillFormProps, noAutofillProps } from "@/lib/noAutofill";
 
 type AppLockScreenProps = {
   mode: "setup" | "unlock";
@@ -56,6 +57,7 @@ export function AppLockScreen({ mode, onUnlocked }: AppLockScreenProps) {
   return (
     <div className="flex min-h-[100dvh] flex-1 flex-col items-center justify-center bg-[#f5f5f7] px-5">
       <form
+        {...noAutofillFormProps}
         onSubmit={(e) => void handleSubmit(e)}
         className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-[0_8px_30px_rgba(0,0,0,0.06)]"
       >
@@ -73,13 +75,10 @@ export function AppLockScreen({ mode, onUnlocked }: AppLockScreenProps) {
             비밀번호 (숫자 4~8자리)
           </span>
           <input
+            {...noAutofillProps}
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
-            autoComplete="one-time-code"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
             name="app-lock-pin"
             value={pin}
             onChange={(e) =>
@@ -97,13 +96,10 @@ export function AppLockScreen({ mode, onUnlocked }: AppLockScreenProps) {
               비밀번호 확인
             </span>
             <input
+              {...noAutofillProps}
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
-              autoComplete="one-time-code"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
               name="app-lock-pin-confirm"
               value={pinConfirm}
               onChange={(e) =>

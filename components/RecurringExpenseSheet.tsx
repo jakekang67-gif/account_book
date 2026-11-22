@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CategoryTree } from "@/lib/categories";
 import { koreaToday } from "@/lib/date";
+import { noAutofillFormProps, noAutofillProps } from "@/lib/noAutofill";
 import type { RecurringExpense } from "@/lib/recurringStore";
 
 type RecurringExpenseSheetProps = {
@@ -324,6 +325,7 @@ export function RecurringExpenseSheet({
           }}
         >
           <form
+            {...noAutofillFormProps}
             role="dialog"
             aria-modal="true"
             aria-labelledby="recurring-form-title"
@@ -339,6 +341,8 @@ export function RecurringExpenseSheet({
             </p>
             <div className="space-y-2.5">
               <input
+                {...noAutofillProps}
+                name="recurring-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="내용 (예: 넷플릭스)"
@@ -347,8 +351,10 @@ export function RecurringExpenseSheet({
                 autoFocus
               />
               <input
+                {...noAutofillProps}
                 type="number"
                 inputMode="numeric"
+                name="recurring-amount"
                 min="1"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -357,6 +363,7 @@ export function RecurringExpenseSheet({
                 disabled={busy}
               />
               <select
+                autoComplete="off"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 className={fieldClass}
@@ -369,6 +376,7 @@ export function RecurringExpenseSheet({
                 ))}
               </select>
               <select
+                autoComplete="off"
                 value={subcategory}
                 onChange={(e) => setSubcategory(e.target.value)}
                 className={fieldClass}
@@ -386,8 +394,10 @@ export function RecurringExpenseSheet({
                 </span>
                 <div className="flex items-center gap-2">
                   <input
+                    {...noAutofillProps}
                     type="number"
                     inputMode="numeric"
+                    name="recurring-interval"
                     min={1}
                     max={60}
                     value={intervalMonths}
@@ -406,7 +416,9 @@ export function RecurringExpenseSheet({
                   시작일
                 </span>
                 <input
+                  {...noAutofillProps}
                   type="date"
+                  name="recurring-start-date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   className={fieldClass}

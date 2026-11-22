@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { koreaToday } from "@/lib/date";
 import type { CategoryTree } from "@/lib/categories";
+import { koreaToday } from "@/lib/date";
+import { noAutofillFormProps, noAutofillProps } from "@/lib/noAutofill";
 
 type ManualExpenseFormProps = {
   categoryTree: CategoryTree;
@@ -95,8 +96,7 @@ export function ManualExpenseForm({
 
   return (
     <form
-      autoComplete="off"
-      data-form-type="other"
+      {...noAutofillFormProps}
       onSubmit={(e) => void handleSubmit(e)}
       className="mx-auto w-full max-w-md space-y-3 px-4 py-4"
     >
@@ -107,7 +107,9 @@ export function ManualExpenseForm({
       <label className="block">
         <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">날짜</span>
         <input
+          {...noAutofillProps}
           type="date"
+          name="manual-expense-date"
           value={date}
           max={todayMax || undefined}
           onChange={(e) => setDate(e.target.value)}
@@ -119,8 +121,10 @@ export function ManualExpenseForm({
       <label className="block">
         <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">금액</span>
         <input
+          {...noAutofillProps}
           type="number"
           inputMode="numeric"
+          name="manual-expense-amount"
           min="1"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
@@ -133,15 +137,11 @@ export function ManualExpenseForm({
       <label className="block">
         <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">내용</span>
         <input
+          {...noAutofillProps}
+          name="manual-expense-description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="내용 (예: 넷플릭스)"
-          autoComplete="off"
-          autoCorrect="off"
-          spellCheck={false}
-          name="expense-description"
-          data-lpignore="true"
-          data-1p-ignore="true"
           className={fieldClass}
           disabled={busy}
         />
@@ -152,6 +152,7 @@ export function ManualExpenseForm({
           카테고리 대분류
         </span>
         <select
+          autoComplete="off"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
           className={fieldClass}
@@ -170,6 +171,7 @@ export function ManualExpenseForm({
           카테고리 소분류
         </span>
         <select
+          autoComplete="off"
           value={subcategory}
           onChange={(e) => setSubcategory(e.target.value)}
           className={fieldClass}
