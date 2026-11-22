@@ -5,37 +5,40 @@ type InstallHelpProps = {
   onClose: () => void;
 };
 
+/** 캐시 때문에 예전 사진이 안 바뀌는 것 방지 */
+const IMG_V = "20261122c";
+
 const CHROME_STEPS: { src: string; caption: string }[] = [
   {
-    src: "/install-guide/step-01.jpg",
+    src: `/install-guide/step-01.jpg?v=${IMG_V}`,
     caption: "1. 검색에서 Chrome을 찾아 엽니다.",
   },
   {
-    src: "/install-guide/step-02.jpg",
+    src: `/install-guide/step-02.jpg?v=${IMG_V}`,
     caption: "2. 주소창에서 가계부 주소를 눌러 엽니다.",
   },
   {
-    src: "/install-guide/step-03.jpg",
+    src: `/install-guide/step-03.jpg?v=${IMG_V}`,
     caption: "3. 오른쪽 위 ⋮(점 세 개)를 누릅니다.",
   },
   {
-    src: "/install-guide/step-04.jpg",
+    src: `/install-guide/step-04.jpg?v=${IMG_V}`,
     caption: "4. 「설치 및 바로가기 만들기」를 누릅니다.",
   },
   {
-    src: "/install-guide/step-05.jpg",
+    src: `/install-guide/step-05.jpg?v=${IMG_V}`,
     caption: "5. 「설치」를 누릅니다.",
   },
   {
-    src: "/install-guide/step-06.jpg",
+    src: `/install-guide/step-06.jpg?v=${IMG_V}`,
     caption: "6. 「설치」를 한 번 더 눌러 확인합니다.",
   },
   {
-    src: "/install-guide/step-07.jpg",
+    src: `/install-guide/step-07.jpg?v=${IMG_V}`,
     caption: "7. 앱 목록에서 「나의 챗가계부」를 찾습니다.",
   },
   {
-    src: "/install-guide/step-08.jpg",
+    src: `/install-guide/step-08.jpg?v=${IMG_V}`,
     caption: "8. 아이콘을 길게 누르고 「홈 화면에 추가」를 누릅니다.",
   },
 ];
@@ -84,7 +87,7 @@ export function InstallHelp({ open, onClose }: InstallHelpProps) {
               <p className="mb-1.5 text-[12px] text-[#86868b]">가계부 주소</p>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/install-guide/url.jpg"
+                src={`/install-guide/url.jpg?v=${IMG_V}`}
                 alt="https://account-book-chi-blue.vercel.app"
                 className="h-auto w-full rounded-lg bg-white"
               />
