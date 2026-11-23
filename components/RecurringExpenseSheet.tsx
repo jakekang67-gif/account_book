@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { CategoryTree } from "@/lib/categories";
+import {
+  DEFAULT_FIXED_INCOME_SUBS,
+  FIXED_INCOME_CATEGORY,
+  type CategoryTree,
+} from "@/lib/categories";
+import type { CategoryItemRow } from "@/lib/categoryStore";
 import { koreaToday } from "@/lib/date";
+import { FixedIncomeSubEditor } from "@/components/FixedIncomeSubEditor";
 import {
   AutofillDecoys,
   NoAutofillInput,
@@ -10,19 +16,20 @@ import {
 import { noAutofillFormProps } from "@/lib/noAutofill";
 import type { RecurringExpense } from "@/lib/recurringStore";
 
-export const FIXED_INCOME_CATEGORY = "고정 수입";
-export const FIXED_INCOME_SUBS = ["급여", "연금", "기타"] as const;
+export { FIXED_INCOME_CATEGORY };
 
 type RecurringExpenseSheetProps = {
   open: boolean;
   rows: RecurringExpense[];
   categoryTree: CategoryTree;
+  categoryRows?: CategoryItemRow[];
   /** expense=정기 지출, income=정기 수입 */
   mode?: "expense" | "income";
   loading?: boolean;
   error?: string | null;
   busy?: boolean;
   onClose: () => void;
+  onCategoriesChanged?: () => Promise<void>;
   onSave: (input: {
     id?: number;
     description: string;
@@ -47,11 +54,13 @@ export function RecurringExpenseSheet({
   open,
   rows,
   categoryTree,
+  categoryRows = [],
   mode = "expense",
   loading,
   error,
   busy,
   onClose,
+  onCategoriesChanged,
   onSave,
   onDelete,
 }: RecurringExpenseSheetProps) {
@@ -65,8 +74,10 @@ export function RecurringExpenseSheet({
   const defaultCategory = isIncome
     ? FIXED_INCOME_CATEGORY
     : (categories[0] ?? "기타");
+  const incomeSubsFromTree =
+    categoryTree[FIXED_INCOME_CATEGORY] ?? [...DEFAULT_FIXED_INCOME_SUBS];
   const defaultSubs = isIncome
-    ? [...FIXED_INCOME_SUBS]
+    ? incomeSubsFromTree
     : (categoryTree[defaultCategory] ?? ["기타"]);
 
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -81,13 +92,14 @@ export function RecurringExpenseSheet({
   const [formError, setFormError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
 
-  const subs = useMemo(
-    () =>
-      isIncome
-        ? [...FIXED_INCOME_SUBS]
-        : (categoryTree[category] ?? ["기타"]),
-    [isIncome, categoryTree, category],
-  );
+  const subs = useMemo(() => {
+    if (isIncome) {
+      return (
+        categoryTree[FIXED_INCOME_CATEGORY] ?? [...DEFAULT_FIXED_INCOME_SUBS]
+      );
+    }
+    return categoryTree[category] ?? ["기타"];
+  }, [isIncome, categoryTree, category]);
 
   // 시작일 빠른 순 (수입/지출 모드에 맞게 필터)
   const sortedRows = useMemo(() => {
@@ -230,8 +242,18 @@ export function RecurringExpenseSheet({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           <p className="mb-3 text-[12px] leading-relaxed text-[#86868b]">
-            주기마다 지출에 자동 저장됩니다. 개월 수로 주기를 정하세요.
+            {isIncome
+              ? "주기마다 수입으로 자동 저장됩니다. 개월 수로 주기를 정하세요."
+              : "주기마다 지출에 자동 저장됩니다. 개월 수로 주기를 정하세요."}
           </p>
+
+          {isIncome && onCategoriesChanged && (
+            <FixedIncomeSubEditor
+              rows={categoryRows}
+              busy={busy}
+              onChanged={onCategoriesChanged}
+            />
+          )}
 
           {error && (
             <p className="mb-2 rounded-xl bg-[#fff4e5] px-3 py-2 text-[12px] text-[#8a6116]">

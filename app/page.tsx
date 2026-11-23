@@ -46,6 +46,7 @@ import {
   type CategoryTree,
 } from "@/lib/categories";
 import {
+  ensureFixedIncomeCategoryExists,
   loadCategoryTree,
   type CategoryItemRow,
 } from "@/lib/categoryStore";
@@ -757,7 +758,9 @@ export default function Home() {
             content: item.message,
           },
         ]);
-        void showRecurringNotification(item.message);
+        void showRecurringNotification(item.message, {
+          isIncome: item.row.category === FIXED_INCOME_CATEGORY,
+        });
       }
     }
 
@@ -1015,6 +1018,8 @@ export default function Home() {
 
   async function openRecurringIncomeSheet() {
     setRecurringIncomeOpen(true);
+    const ensured = await ensureFixedIncomeCategoryExists(categoryRows);
+    if (ensured.added) await refreshCategories();
     const applied = await applyDueRecurringExpenses(
       currentMonth || koreaToday().slice(0, 7),
     );
@@ -3187,10 +3192,12 @@ export default function Home() {
         mode="income"
         rows={recurringRows}
         categoryTree={categoryTree}
+        categoryRows={categoryRows}
         loading={recurringLoading}
         error={recurringError}
         busy={recurringBusy}
         onClose={() => setRecurringIncomeOpen(false)}
+        onCategoriesChanged={refreshCategories}
         onSave={async (input) => {
           setRecurringBusy(true);
           const result = await saveRecurringExpense({

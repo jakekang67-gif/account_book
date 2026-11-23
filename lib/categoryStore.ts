@@ -1,6 +1,8 @@
 import {
   categoryTreeToRows,
   DEFAULT_CATEGORY_TREE,
+  DEFAULT_FIXED_INCOME_SUBS,
+  FIXED_INCOME_CATEGORY,
   rowsToCategoryTree,
   type CategoryTree,
 } from "@/lib/categories";
@@ -46,12 +48,30 @@ export async function loadCategoryTree(): Promise<{
     return loadCategoryTree();
   }
 
+  // 예전 「수입 > 급여」는 정기 수입(고정 수입)과 겹치므로 한 번 정리
+  const cleaned = await removeLegacyIncomeSalary(rows);
+  if (cleaned.removed) {
+    return loadCategoryTree();
+  }
+
   // 삭제한 분류는 다시 넣지 않음 (최초 seed만 DEFAULT로 채움)
   return {
     tree: rowsToCategoryTree(rows),
     rows,
     error: null,
   };
+}
+
+/** 수입 대분류의 소분류 「급여」만 제거 (고정 수입 급여는 유지) */
+async function removeLegacyIncomeSalary(rows: CategoryItemRow[]) {
+  const legacy = rows.filter(
+    (r) => r.category === "수입" && r.subcategory === "급여",
+  );
+  if (legacy.length === 0) return { removed: false };
+  for (const row of legacy) {
+    await supabase.from("category_items").delete().eq("id", row.id);
+  }
+  return { removed: true };
 }
 
 async function seedDefaultCategories() {
@@ -90,6 +110,35 @@ export async function addSubcategory(category: string, subcategory: string) {
 export async function deleteSubcategory(id: number) {
   const { error } = await supabase.from("category_items").delete().eq("id", id);
   return { error: error?.message ?? null };
+}
+
+/** 소분류 이름 수정 */
+export async function renameSubcategory(id: number, subcategory: string) {
+  const sub = subcategory.trim();
+  if (!sub) return { error: "소분류 이름을 입력해 주세요." };
+  const { error } = await supabase
+    .from("category_items")
+    .update({ subcategory: sub })
+    .eq("id", id);
+  return { error: error?.message ?? null };
+}
+
+/**
+ * 고정 수입 대분류가 전혀 없을 때만 기본 소분류를 심습니다.
+ * (사용자가 지운 뒤에는 다시 넣지 않음)
+ */
+export async function ensureFixedIncomeCategoryExists(
+  rows: CategoryItemRow[],
+): Promise<{ added: boolean; error: string | null }> {
+  if (rows.some((r) => r.category === FIXED_INCOME_CATEGORY)) {
+    return { added: false, error: null };
+  }
+  const payload = DEFAULT_FIXED_INCOME_SUBS.map((subcategory) => ({
+    category: FIXED_INCOME_CATEGORY,
+    subcategory,
+  }));
+  const { error } = await supabase.from("category_items").insert(payload);
+  return { added: !error, error: error?.message ?? null };
 }
 
 /** 대분류 전체(하위 소분류 포함) 삭제 */

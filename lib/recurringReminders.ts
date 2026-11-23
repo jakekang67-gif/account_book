@@ -89,8 +89,18 @@ export function isRecurringDueOnDate(row: RecurringExpense, date: string) {
   return recurringDateForMonth(row.start_date, monthKey) === date;
 }
 
-function remainingAfterItem(rows: RecurringExpense[], dueDate: string, amount: number) {
-  const summary = summarizeRecurringForMonth(rows, dueDate.slice(0, 7));
+function isFixedIncomeRow(row: RecurringExpense) {
+  return row.category === "고정 수입";
+}
+
+function remainingAfterItem(
+  rows: RecurringExpense[],
+  dueDate: string,
+  amount: number,
+  income: boolean,
+) {
+  const filtered = rows.filter((r) => isFixedIncomeRow(r) === income);
+  const summary = summarizeRecurringForMonth(filtered, dueDate.slice(0, 7));
   return Math.max(0, summary.total - amount);
 }
 
@@ -100,12 +110,14 @@ export function buildEveReminderMessage(
   remaining: number,
 ) {
   const day = dayLabel(dueDate);
-  return `내일(${day}일) ${row.description} ${formatRecurringSpeechAmount(row.amount)} 정기 지출, 이번달 나머지 정기 지출 금액은 ${new Intl.NumberFormat("ko-KR").format(remaining)}원`;
+  const kindLabel = isFixedIncomeRow(row) ? "정기 수입" : "정기 지출";
+  return `내일(${day}일) ${row.description} ${formatRecurringSpeechAmount(row.amount)} ${kindLabel}, 이번달 나머지 ${kindLabel} 금액은 ${new Intl.NumberFormat("ko-KR").format(remaining)}원`;
 }
 
 export function buildDayReminderMessage(row: RecurringExpense, dueDate: string) {
   const day = dayLabel(dueDate);
-  return `오늘(${day}일) ${row.description} ${formatRecurringSpeechAmount(row.amount)} 정기 지출`;
+  const kindLabel = isFixedIncomeRow(row) ? "정기 수입" : "정기 지출";
+  return `오늘(${day}일) ${row.description} ${formatRecurringSpeechAmount(row.amount)} ${kindLabel}`;
 }
 
 /**
@@ -126,7 +138,12 @@ export function collectRecurringReminders(
 
   for (const row of active) {
     if (isRecurringDueOnDate(row, tomorrow)) {
-      const remaining = remainingAfterItem(active, tomorrow, row.amount);
+      const remaining = remainingAfterItem(
+        active,
+        tomorrow,
+        row.amount,
+        isFixedIncomeRow(row),
+      );
       out.push({
         kind: "eve",
         row,
@@ -193,11 +210,14 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   }
 }
 
-export async function showRecurringNotification(body: string) {
+export async function showRecurringNotification(
+  body: string,
+  options?: { isIncome?: boolean },
+) {
   if (typeof window === "undefined" || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
 
-  const title = "정기 지출 알림";
+  const title = options?.isIncome ? "정기 수입 알림" : "정기 지출 알림";
   try {
     if ("serviceWorker" in navigator) {
       const reg = await navigator.serviceWorker.ready;

@@ -5,9 +5,13 @@
 
 export type CategoryTree = Record<string, string[]>;
 
+/** 정기 수입 메뉴에서 쓰는 대분류 (이름은 고정) */
+export const FIXED_INCOME_CATEGORY = "고정 수입";
+export const DEFAULT_FIXED_INCOME_SUBS = ["급여", "연금", "기타"] as const;
+
 export const DEFAULT_CATEGORY_TREE: CategoryTree = {
-  "고정 수입": ["급여", "연금", "기타"],
-  수입: ["급여", "기타"],
+  [FIXED_INCOME_CATEGORY]: [...DEFAULT_FIXED_INCOME_SUBS],
+  수입: ["기타"],
   투자: ["주식", "증권", "적금", "기타"],
   대출: ["주택", "재테크", "기타"],
   식대: ["아침", "점심", "저녁", "야식", "회식", "기타식대"],
