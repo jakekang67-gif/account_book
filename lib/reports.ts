@@ -88,6 +88,33 @@ export function averageMonthlyExpense(expenses: ExpenseLike[]) {
   };
 }
 
+/**
+ * 대분류별 월 평균 = (해당 대분류 전체 합계) ÷ (내역 있는 달 수)
+ * 수입 분류는 제외. 금액 큰 순.
+ */
+export function averageMonthlyByCategory(expenses: ExpenseLike[]) {
+  const months = summarizeByMonth(expenses);
+  const monthCount = months.length;
+  if (monthCount === 0) return { monthCount: 0, categories: [] as Array<{ category: string; average: number }> };
+
+  const totals = new Map<string, number>();
+  for (const item of expenses) {
+    if (!item.date || item.date.length < 7) continue;
+    if (isIncomeCategory(item.category)) continue;
+    const category = item.category?.trim() || "미분류";
+    totals.set(category, (totals.get(category) ?? 0) + item.amount);
+  }
+
+  const categories = [...totals.entries()]
+    .map(([category, total]) => ({
+      category,
+      average: Math.round(total / monthCount),
+    }))
+    .sort((a, b) => b.average - a.average);
+
+  return { monthCount, categories };
+}
+
 /** 데이터가 있는 월 목록 (최신 순) */
 export function listMonths(expenses: ExpenseLike[]) {
   return summarizeByMonth(expenses).map((row) => row.month);
