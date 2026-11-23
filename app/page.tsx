@@ -19,7 +19,10 @@ import { ChatNoticeBanner } from "@/components/ChatNoticeBanner";
 import { InstallHelp } from "@/components/InstallHelp";
 import { ManualExpenseForm } from "@/components/ManualExpenseForm";
 import { PurchaseHistorySheet } from "@/components/PurchaseHistorySheet";
-import { RecurringExpenseSheet } from "@/components/RecurringExpenseSheet";
+import {
+  FIXED_INCOME_CATEGORY,
+  RecurringExpenseSheet,
+} from "@/components/RecurringExpenseSheet";
 import { SaveExpenseToDateDialog } from "@/components/SaveExpenseToDateDialog";
 import { CategoryPieChart } from "@/components/CategoryPieChart";
 import { LoginForm } from "@/components/LoginForm";
@@ -80,8 +83,10 @@ import {
   type RecurringExpense,
 } from "@/lib/recurringStore";
 import {
+  averageMonthlyExpense,
   formatMonthLabel,
   formatStatsBreakdownReply,
+  isIncomeCategory,
   listMonths,
   monthKeyFromDate,
   resolveStatsMonthKey,
@@ -102,7 +107,7 @@ import {
 } from "@/lib/uiPrefs";
 import { supabase } from "@/lib/supabase";
 
-type AppTab = "chat" | "input" | "monthly" | "category";
+type AppTab = "chat" | "input" | "monthly" | "category" | "average";
 
 /** expenses 테이블 한 행 */
 type Expense = {
@@ -409,6 +414,7 @@ export default function Home() {
   const [budgetListOpen, setBudgetListOpen] = useState(false);
   const [monthSummaryOpen, setMonthSummaryOpen] = useState(false);
   const [recurringOpen, setRecurringOpen] = useState(false);
+  const [recurringIncomeOpen, setRecurringIncomeOpen] = useState(false);
   const [recurringRows, setRecurringRows] = useState<RecurringExpense[]>([]);
   const [recurringLoading, setRecurringLoading] = useState(false);
   const [recurringBusy, setRecurringBusy] = useState(false);
@@ -486,25 +492,33 @@ export default function Home() {
     [categoryTotals],
   );
 
-  const thisMonthSpent = useMemo(
+  const thisMonthExpenses = useMemo(
     () =>
       currentMonth
-        ? occurredExpenses
-            .filter(
-              (item) =>
-                monthKeyFromDate(item.date) === currentMonth &&
-                item.category !== "수입",
-            )
-            .reduce((sum, item) => sum + item.amount, 0)
-        : 0,
+        ? occurredExpenses.filter(
+            (item) =>
+              monthKeyFromDate(item.date) === currentMonth &&
+              !isIncomeCategory(item.category),
+          )
+        : [],
     [occurredExpenses, currentMonth],
+  );
+
+  const thisMonthSpent = useMemo(
+    () => thisMonthExpenses.reduce((sum, item) => sum + item.amount, 0),
+    [thisMonthExpenses],
   );
 
   const totalExpenseAll = useMemo(
     () =>
       occurredExpenses
-        .filter((item) => item.category !== "수입")
+        .filter((item) => !isIncomeCategory(item.category))
         .reduce((sum, item) => sum + item.amount, 0),
+    [occurredExpenses],
+  );
+
+  const monthlyAverage = useMemo(
+    () => averageMonthlyExpense(occurredExpenses),
     [occurredExpenses],
   );
 
@@ -991,6 +1005,16 @@ export default function Home() {
     setRecurringOpen(true);
     // 메뉴 클릭(사용자 제스처) 시점에 알림 권한 요청 — 브라우저 제한에 더 잘 맞음
     void ensureNotificationPermission();
+    const applied = await applyDueRecurringExpenses(
+      currentMonth || koreaToday().slice(0, 7),
+    );
+    if (applied.error) setRecurringError(applied.error);
+    if (applied.applied > 0 || applied.removedFuture > 0) await loadExpenses();
+    await refreshRecurring();
+  }
+
+  async function openRecurringIncomeSheet() {
+    setRecurringIncomeOpen(true);
     const applied = await applyDueRecurringExpenses(
       currentMonth || koreaToday().slice(0, 7),
     );
@@ -2166,7 +2190,7 @@ export default function Home() {
       ? "서버가 바빠서 다른 경로로 시도 중이에요. 조금만 더 기다려 주세요..."
       : "생각 중이에요. 보통 몇 초면 답해요...";
 
-  const total = occurredExpenses.reduce((sum, item) => sum + item.amount, 0);
+  const total = thisMonthSpent;
 
   const tabTitle =
     tab === "chat"
@@ -2175,7 +2199,9 @@ export default function Home() {
         ? "직접 입력"
         : tab === "monthly"
           ? "월별 지출"
-          : "카테고리별 지출";
+          : tab === "average"
+            ? "월 평균 지출"
+            : "카테고리별 지출";
 
   async function saveManualExpense(payload: {
     date: string;
@@ -2253,6 +2279,7 @@ export default function Home() {
                 setMonthSummaryOpen(true);
               }}
               onOpenRecurring={() => void openRecurringSheet()}
+              onOpenRecurringIncome={() => void openRecurringIncomeSheet()}
               onOpenInstallHelp={() => setInstallHelpOpen(true)}
               onOpenChatCleanup={() => setChatCleanupOpen(true)}
               onOpenChatNotice={() => {
@@ -2293,7 +2320,11 @@ export default function Home() {
         <section className="shrink-0 border-b border-[#9ec0e8] bg-[#d4e8ff] px-3 py-2">
           <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
             <div className="flex min-w-0 items-baseline gap-2">
-              <p className="text-[12px] font-medium text-[#4a6a8a]">지출 내역</p>
+              <p className="text-[12px] font-medium text-[#4a6a8a]">
+                {currentMonth
+                  ? `${formatMonthLabel(currentMonth)} 지출`
+                  : "지출 내역"}
+              </p>
               <p className="text-[12px] tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
                 합계 {formatAmount(total)}
                 <span className="ml-0.5 text-[#86868b]">원</span>
@@ -2760,36 +2791,40 @@ export default function Home() {
                     {!appMenuOpen && (
                       <CategoryPieChart data={categoryTotals} />
                     )}
-                    <ul className="space-y-2">
+                    <ul className="space-y-1">
                       {categoryTotals.map((row) => {
                         const open = expandedCategory === row.category;
+                        const pct =
+                          categoryMonthTotal > 0
+                            ? ((row.total / categoryMonthTotal) * 100).toFixed(1)
+                            : "0.0";
                         return (
                           <li
                             key={row.category}
-                            className="rounded-2xl bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                            className="rounded-xl bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
                           >
                             <button
                               type="button"
                               onClick={() =>
                                 setExpandedCategory(open ? null : row.category)
                               }
-                              className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                              className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
                             >
-                              <p className="text-[15px] font-medium text-[#1d1d1f]">
+                              <p className="text-[14px] font-medium text-[#1d1d1f]">
                                 {row.category}
-                                <span className="ml-2 text-[12px] font-normal text-[#86868b]">
+                                <span className="ml-1.5 text-[11px] font-normal text-[#86868b]">
                                   {open ? "접기" : "소분류"}
                                 </span>
                               </p>
-                              <p className="text-[16px] font-medium tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
+                              <p className="text-[14px] font-medium tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
                                 {formatAmount(row.total)}
-                                <span className="ml-0.5 text-[12px] font-normal text-[#86868b]">
-                                  원
+                                <span className="ml-0.5 text-[11px] font-normal text-[#86868b]">
+                                  원({pct}%)
                                 </span>
                               </p>
                             </button>
                             {open && (
-                              <ul className="space-y-1 border-t border-black/5 px-4 py-2.5">
+                              <ul className="space-y-0.5 border-t border-black/5 px-3 py-1.5">
                                 {(categorySubTotals.length > 0
                                   ? categorySubTotals
                                   : summarizeBySubcategory(
@@ -2797,24 +2832,33 @@ export default function Home() {
                                       reportMonth,
                                       row.category,
                                     )
-                                ).map((sub) => (
+                                ).map((sub) => {
+                                  const subPct =
+                                    categoryMonthTotal > 0
+                                      ? (
+                                          (sub.total / categoryMonthTotal) *
+                                          100
+                                        ).toFixed(1)
+                                      : "0.0";
+                                  return (
                                   <li
                                     key={sub.subcategory}
-                                    className="flex items-center justify-between gap-3 py-1.5"
+                                    className="flex items-center justify-between gap-3 py-1"
                                   >
-                                    <p className="text-[13px] text-[#6e6e73]">
+                                    <p className="text-[12px] text-[#6e6e73]">
                                       {sub.subcategory}
                                     </p>
-                                    <p className="text-[14px] tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
+                                    <p className="text-[13px] tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
                                       {formatAmount(sub.total)}
-                                      <span className="ml-0.5 text-[11px] text-[#86868b]">
-                                        원
+                                      <span className="ml-0.5 text-[10px] text-[#86868b]">
+                                        원({subPct}%)
                                       </span>
                                     </p>
-                </li>
-              ))}
-            </ul>
-          )}
+                                  </li>
+                                  );
+                                })}
+                              </ul>
+                            )}
                           </li>
                         );
                       })}
@@ -2826,15 +2870,69 @@ export default function Home() {
           </div>
         )}
 
+        {tab === "average" && (
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            {loadingExpenses ? (
+              <p className="rounded-2xl bg-white px-4 py-8 text-center text-[14px] text-[#86868b]">
+                불러오는 중...
+              </p>
+            ) : monthlyAverage.monthCount === 0 ? (
+              <p className="rounded-2xl bg-white px-4 py-8 text-center text-[14px] text-[#86868b]">
+                아직 집계할 내역이 없습니다.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <div className="rounded-2xl bg-white px-4 py-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                  <p className="text-[13px] text-[#86868b]">
+                    월 평균 지출 ({monthlyAverage.monthCount}개월)
+                  </p>
+                  <p className="mt-1 text-[28px] font-semibold tabular-nums tracking-tight text-[#1d1d1f] [font-feature-settings:'zero'_0]">
+                    {formatAmount(monthlyAverage.average)}
+                    <span className="ml-1 text-[14px] font-normal text-[#86868b]">
+                      원
+                    </span>
+                  </p>
+                  <p className="mt-2 text-[12px] leading-relaxed text-[#86868b]">
+                    내역이 있는 달의 지출 합계를 달 수로 나눈 값입니다. 수입은
+                    제외합니다.
+                  </p>
+                </div>
+                <p className="px-1 text-[13px] font-medium text-[#86868b]">
+                  월별 지출 (참고)
+                </p>
+                <ul className="space-y-1">
+                  {monthlyAverage.months.map((row) => (
+                    <li
+                      key={row.month}
+                      className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                    >
+                      <p className="text-[14px] font-medium text-[#1d1d1f]">
+                        {formatMonthLabel(row.month)}
+                      </p>
+                      <p className="text-[14px] tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
+                        {formatAmount(row.total)}
+                        <span className="ml-0.5 text-[11px] text-[#86868b]">
+                          원
+                        </span>
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 하단 메뉴 */}
         <nav className="shrink-0 border-t border-black/5 bg-white px-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1">
-          <div className="grid grid-cols-4 gap-0.5">
+          <div className="grid grid-cols-5 gap-0.5">
             {(
               [
                 { id: "chat", label: "채팅" },
                 { id: "input", label: "입력" },
                 { id: "monthly", label: "월별" },
                 { id: "category", label: "분류" },
+                { id: "average", label: "평균" },
               ] as const
             ).map((item) => {
               const active = tab === item.id;
@@ -2886,7 +2984,7 @@ export default function Home() {
 
       <PurchaseHistorySheet
         open={purchaseSheetOpen}
-        items={occurredExpenses}
+        items={thisMonthExpenses}
         formatAmount={formatAmount}
         formatCategoryLabel={formatCategoryLabel}
         selectedId={selectedId}
@@ -3054,6 +3152,7 @@ export default function Home() {
 
       <RecurringExpenseSheet
         open={recurringOpen}
+        mode="expense"
         rows={recurringRows}
         categoryTree={categoryTree}
         loading={recurringLoading}
@@ -3063,6 +3162,41 @@ export default function Home() {
         onSave={async (input) => {
           setRecurringBusy(true);
           const result = await saveRecurringExpense(input);
+          if (!result.error) {
+            const applied = await applyDueRecurringExpenses(
+              currentMonth || koreaToday().slice(0, 7),
+            );
+            if (applied.error) setRecurringError(applied.error);
+            await refreshRecurring();
+            await loadExpenses();
+          }
+          setRecurringBusy(false);
+          return result.error;
+        }}
+        onDelete={async (id) => {
+          setRecurringBusy(true);
+          const result = await deleteRecurringExpense(id);
+          if (!result.error) await refreshRecurring();
+          setRecurringBusy(false);
+          return result.error;
+        }}
+      />
+
+      <RecurringExpenseSheet
+        open={recurringIncomeOpen}
+        mode="income"
+        rows={recurringRows}
+        categoryTree={categoryTree}
+        loading={recurringLoading}
+        error={recurringError}
+        busy={recurringBusy}
+        onClose={() => setRecurringIncomeOpen(false)}
+        onSave={async (input) => {
+          setRecurringBusy(true);
+          const result = await saveRecurringExpense({
+            ...input,
+            category: FIXED_INCOME_CATEGORY,
+          });
           if (!result.error) {
             const applied = await applyDueRecurringExpenses(
               currentMonth || koreaToday().slice(0, 7),

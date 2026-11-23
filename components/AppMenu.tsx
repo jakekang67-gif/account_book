@@ -12,6 +12,7 @@ type AppMenuProps = {
   onOpenBudgetList?: () => void;
   onOpenMonthSummary?: () => void;
   onOpenRecurring?: () => void;
+  onOpenRecurringIncome?: () => void;
   onOpenInstallHelp?: () => void;
   onOpenChatCleanup?: () => void;
   onOpenChatNotice?: () => void;
@@ -28,6 +29,7 @@ export function AppMenu({
   onOpenBudgetList,
   onOpenMonthSummary,
   onOpenRecurring,
+  onOpenRecurringIncome,
   onOpenInstallHelp,
   onOpenChatCleanup,
   onOpenChatNotice,
@@ -119,6 +121,18 @@ export function AppMenu({
                 className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
               >
                 정기 지출
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenRecurringIncome?.();
+                }}
+                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
+              >
+                정기 수입
               </button>
             </li>
             <li>

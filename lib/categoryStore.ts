@@ -46,44 +46,12 @@ export async function loadCategoryTree(): Promise<{
     return loadCategoryTree();
   }
 
-  // 기존 계정에도 필수 대·소분류가 없으면 보강
-  const ensured = await ensureRequiredCategories(rows);
-  if (ensured.added) {
-    return loadCategoryTree();
-  }
-
+  // 삭제한 분류는 다시 넣지 않음 (최초 seed만 DEFAULT로 채움)
   return {
     tree: rowsToCategoryTree(rows),
     rows,
     error: null,
   };
-}
-
-/** 나중에 추가된 대·소분류를 기존 DB에도 맞춤 */
-const REQUIRED_CATEGORY_SUBS: Record<string, string[]> = {
-  수입: ["급여", "기타"],
-  투자: ["주식", "증권", "적금", "기타"],
-  대출: ["주택", "재테크", "기타"],
-};
-
-async function ensureRequiredCategories(rows: CategoryItemRow[]) {
-  const existing = new Set(
-    rows.map((r) => `${r.category}\0${r.subcategory}`),
-  );
-  const missing: Array<{ category: string; subcategory: string }> = [];
-  for (const [category, subs] of Object.entries(REQUIRED_CATEGORY_SUBS)) {
-    for (const subcategory of subs) {
-      if (!existing.has(`${category}\0${subcategory}`)) {
-        missing.push({ category, subcategory });
-      }
-    }
-  }
-  if (missing.length === 0) {
-    return { added: false, error: null as string | null };
-  }
-
-  const { error } = await supabase.from("category_items").insert(missing);
-  return { added: !error, error: error?.message ?? null };
 }
 
 async function seedDefaultCategories() {

@@ -201,7 +201,7 @@ export function PurchaseHistorySheet({
           {filtered.length === 0 ? (
             <li className="rounded-2xl bg-[#f5f5f7] px-3 py-6 text-center text-[13px] text-[#86868b]">
               {items.length === 0
-                ? "아직 저장된 내역이 없습니다."
+                ? "이번 달 저장된 내역이 없습니다."
                 : "검색 결과가 없습니다."}
             </li>
           ) : (

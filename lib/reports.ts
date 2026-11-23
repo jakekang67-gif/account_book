@@ -22,12 +22,18 @@ function formatWon(amount: number) {
   return `${new Intl.NumberFormat("ko-KR").format(amount)}원`;
 }
 
+/** 수입 대분류 (지출 합계·차트에서 제외) */
+export function isIncomeCategory(category: string | null | undefined) {
+  const c = category?.trim() ?? "";
+  return c === "수입" || c === "고정 수입";
+}
+
 /** 월별 총액 (최신 월 위). 수입 분류는 제외 */
 export function summarizeByMonth(expenses: ExpenseLike[]) {
   const map = new Map<string, number>();
   for (const item of expenses) {
     if (!item.date || item.date.length < 7) continue;
-    if (item.category === "수입") continue;
+    if (isIncomeCategory(item.category)) continue;
     const key = monthKeyFromDate(item.date);
     map.set(key, (map.get(key) ?? 0) + item.amount);
   }
@@ -41,7 +47,7 @@ export function summarizeByCategory(expenses: ExpenseLike[], monthKey: string) {
   const map = new Map<string, number>();
   for (const item of expenses) {
     if (monthKeyFromDate(item.date) !== monthKey) continue;
-    if (item.category === "수입") continue;
+    if (isIncomeCategory(item.category)) continue;
     const category = item.category?.trim() || "미분류";
     map.set(category, (map.get(category) ?? 0) + item.amount);
   }
@@ -59,7 +65,7 @@ export function summarizeBySubcategory(
   const map = new Map<string, number>();
   for (const item of expenses) {
     if (monthKeyFromDate(item.date) !== monthKey) continue;
-    if (item.category === "수입") continue;
+    if (isIncomeCategory(item.category)) continue;
     const cat = item.category?.trim() || "미분류";
     if (cat !== category) continue;
     const sub = item.subcategory?.trim() || "미분류";
@@ -68,6 +74,18 @@ export function summarizeBySubcategory(
   return [...map.entries()]
     .map(([subcategory, total]) => ({ subcategory, total }))
     .sort((a, b) => b.total - a.total);
+}
+
+/** 내역이 있는 달 기준 월 평균 지출 */
+export function averageMonthlyExpense(expenses: ExpenseLike[]) {
+  const months = summarizeByMonth(expenses);
+  if (months.length === 0) return { average: 0, monthCount: 0, months };
+  const sum = months.reduce((s, row) => s + row.total, 0);
+  return {
+    average: Math.round(sum / months.length),
+    monthCount: months.length,
+    months,
+  };
 }
 
 /** 데이터가 있는 월 목록 (최신 순) */
@@ -104,7 +122,7 @@ export function matchCategoryFromText(
   const t = text.replace(/\s+/g, "");
   const sorted = [...categories].sort((a, b) => b.length - a.length);
   for (const cat of sorted) {
-    if (cat === "수입") continue;
+    if (isIncomeCategory(cat)) continue;
     if (t.includes(cat.replace(/\s+/g, ""))) return cat;
   }
   return null;

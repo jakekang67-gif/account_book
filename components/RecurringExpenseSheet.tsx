@@ -10,10 +10,15 @@ import {
 import { noAutofillFormProps } from "@/lib/noAutofill";
 import type { RecurringExpense } from "@/lib/recurringStore";
 
+export const FIXED_INCOME_CATEGORY = "고정 수입";
+export const FIXED_INCOME_SUBS = ["급여", "연금", "기타"] as const;
+
 type RecurringExpenseSheetProps = {
   open: boolean;
   rows: RecurringExpense[];
   categoryTree: CategoryTree;
+  /** expense=정기 지출, income=정기 수입 */
+  mode?: "expense" | "income";
   loading?: boolean;
   error?: string | null;
   busy?: boolean;
@@ -37,11 +42,12 @@ function formatAmount(n: number) {
 const fieldClass =
   "w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[14px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]";
 
-/** 정기 지출 목록·추가·수정·삭제 */
+/** 정기 지출·정기 수입 목록·추가·수정·삭제 */
 export function RecurringExpenseSheet({
   open,
   rows,
   categoryTree,
+  mode = "expense",
   loading,
   error,
   busy,
@@ -49,9 +55,19 @@ export function RecurringExpenseSheet({
   onSave,
   onDelete,
 }: RecurringExpenseSheetProps) {
-  const categories = Object.keys(categoryTree);
-  const defaultCategory =
-    categories.find((c) => c !== "수입") ?? categories[0] ?? "기타";
+  const isIncome = mode === "income";
+  const title = isIncome ? "정기 수입" : "정기 지출";
+  const categories = isIncome
+    ? [FIXED_INCOME_CATEGORY]
+    : Object.keys(categoryTree).filter(
+        (c) => c !== "수입" && c !== FIXED_INCOME_CATEGORY,
+      );
+  const defaultCategory = isIncome
+    ? FIXED_INCOME_CATEGORY
+    : (categories[0] ?? "기타");
+  const defaultSubs = isIncome
+    ? [...FIXED_INCOME_SUBS]
+    : (categoryTree[defaultCategory] ?? ["기타"]);
 
   const [editingId, setEditingId] = useState<number | null>(null);
   /** 목록에서 탭해 수정·삭제를 보여줄 항목 */
@@ -59,29 +75,33 @@ export function RecurringExpenseSheet({
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState(defaultCategory);
-  const [subcategory, setSubcategory] = useState(
-    (categoryTree[defaultCategory] ?? ["기타"])[0] ?? "기타",
-  );
+  const [subcategory, setSubcategory] = useState(defaultSubs[0] ?? "기타");
   const [intervalMonths, setIntervalMonths] = useState("1");
   const [startDate, setStartDate] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
 
   const subs = useMemo(
-    () => categoryTree[category] ?? ["기타"],
-    [categoryTree, category],
+    () =>
+      isIncome
+        ? [...FIXED_INCOME_SUBS]
+        : (categoryTree[category] ?? ["기타"]),
+    [isIncome, categoryTree, category],
   );
 
-  // 시작일 빠른 순
-  const sortedRows = useMemo(
-    () =>
-      [...rows].sort((a, b) => {
-        const byDate = a.start_date.localeCompare(b.start_date);
-        if (byDate !== 0) return byDate;
-        return a.id - b.id;
-      }),
-    [rows],
-  );
+  // 시작일 빠른 순 (수입/지출 모드에 맞게 필터)
+  const sortedRows = useMemo(() => {
+    const filtered = rows.filter((row) =>
+      isIncome
+        ? row.category === FIXED_INCOME_CATEGORY
+        : row.category !== FIXED_INCOME_CATEGORY,
+    );
+    return [...filtered].sort((a, b) => {
+      const byDate = a.start_date.localeCompare(b.start_date);
+      if (byDate !== 0) return byDate;
+      return a.id - b.id;
+    });
+  }, [rows, isIncome]);
 
   const totalAmount = useMemo(
     () => sortedRows.reduce((sum, row) => sum + row.amount, 0),
@@ -99,7 +119,7 @@ export function RecurringExpenseSheet({
     setDescription("");
     setAmount("");
     setCategory(defaultCategory);
-    setSubcategory((categoryTree[defaultCategory] ?? ["기타"])[0] ?? "기타");
+    setSubcategory(defaultSubs[0] ?? "기타");
     setIntervalMonths("1");
     setStartDate("");
     setFormError(null);
@@ -120,7 +140,7 @@ export function RecurringExpenseSheet({
     setDescription("");
     setAmount("");
     setCategory(defaultCategory);
-    setSubcategory((categoryTree[defaultCategory] ?? ["기타"])[0] ?? "기타");
+    setSubcategory(defaultSubs[0] ?? "기타");
     setIntervalMonths("1");
     setStartDate(koreaToday());
     setFormError(null);
@@ -167,7 +187,7 @@ export function RecurringExpenseSheet({
       id: editingId ?? undefined,
       description: description.trim(),
       amount: n,
-      category,
+      category: isIncome ? FIXED_INCOME_CATEGORY : category,
       subcategory,
       interval_months: Math.round(interval),
       start_date: startDate,
@@ -194,7 +214,7 @@ export function RecurringExpenseSheet({
             id="recurring-title"
             className="text-[16px] font-semibold text-[#1d1d1f]"
           >
-            정기 지출
+            {title}
           </h2>
           <button
             type="button"
@@ -228,7 +248,7 @@ export function RecurringExpenseSheet({
             disabled={busy}
             className="mb-3 w-full rounded-2xl bg-[#1d1d1f] py-2.5 text-[14px] font-medium text-white disabled:opacity-40"
           >
-            정기 지출 추가
+            {title} 추가
           </button>
 
           <div className="mb-4 flex items-center justify-between rounded-2xl bg-[#f5f5f7] px-3.5 py-2.5">
@@ -247,7 +267,7 @@ export function RecurringExpenseSheet({
             </p>
           ) : sortedRows.length === 0 ? (
             <p className="rounded-2xl bg-[#f5f5f7] px-3 py-6 text-center text-[13px] text-[#86868b]">
-              등록된 정기 지출이 없습니다.
+              등록된 {title}이 없습니다.
             </p>
           ) : (
             <ul className="space-y-2">
@@ -297,7 +317,7 @@ export function RecurringExpenseSheet({
                           onClick={() => {
                             if (
                               window.confirm(
-                                `"${row.description}" 정기 지출을 삭제할까요? (이미 저장된 지출은 그대로 둡니다)`,
+                                `"${row.description}" ${title}을 삭제할까요? (이미 저장된 내역은 그대로 둡니다)`,
                               )
                             ) {
                               void onDelete(row.id).then(() => {
@@ -341,7 +361,7 @@ export function RecurringExpenseSheet({
               id="recurring-form-title"
               className="mb-3 text-[15px] font-semibold text-[#1d1d1f]"
             >
-              {editingId ? "정기 지출 수정" : "정기 지출 추가"}
+              {editingId ? `${title} 수정` : `${title} 추가`}
             </p>
             <div className="relative space-y-2.5">
               <AutofillDecoys />

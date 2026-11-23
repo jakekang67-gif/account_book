@@ -36,6 +36,16 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+/** 금액이 포함됐는지 (원 / 숫자 3자리 이상) */
+function hasAmount(text: string) {
+  const t = text.replace(/\s+/g, "");
+  if (/\d+원/.test(t)) return true;
+  if (/\d{1,3}(,\d{3})+원?/.test(t)) return true;
+  // "이천원" 등은 숫자 변환 전이므로, 숫자+원 또는 순수 큰 숫자
+  if (/\d{3,}/.test(t)) return true;
+  return false;
+}
+
 type VoiceMicButtonProps = {
   disabled?: boolean;
   onTranscript: (text: string) => void;
@@ -44,7 +54,7 @@ type VoiceMicButtonProps = {
 
 /**
  * Web Speech API 마이크 버튼.
- * 최종 인식 문장을 onTranscript로 넘깁니다.
+ * 잠깐 쉬어도 계속 듣고, 금액이 나온 뒤에만 입력창으로 넘깁니다.
  */
 export function VoiceMicButton({
   disabled,
@@ -55,18 +65,34 @@ export function VoiceMicButton({
   const [supported, setSupported] = useState(true);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const finalTextRef = useRef("");
+  const wantListenRef = useRef(false);
+  const deliveredRef = useRef(false);
 
   useEffect(() => {
     setSupported(Boolean(getSpeechRecognitionCtor()));
     return () => {
+      wantListenRef.current = false;
       recognitionRef.current?.abort();
       recognitionRef.current = null;
     };
   }, []);
 
   function stopListening() {
+    wantListenRef.current = false;
     recognitionRef.current?.stop();
     setListening(false);
+  }
+
+  function deliverIfReady() {
+    const text = finalTextRef.current.trim();
+    if (!text || deliveredRef.current) return false;
+    if (!hasAmount(text)) return false;
+    deliveredRef.current = true;
+    wantListenRef.current = false;
+    onTranscript(text);
+    recognitionRef.current?.stop();
+    setListening(false);
+    return true;
   }
 
   function startListening() {
@@ -80,35 +106,41 @@ export function VoiceMicButton({
     }
 
     finalTextRef.current = "";
+    deliveredRef.current = false;
+    wantListenRef.current = true;
+
     const recognition = new Ctor();
     recognition.lang = "ko-KR";
-    recognition.continuous = false;
+    // 쉼 후에도 이어서 듣기
+    recognition.continuous = true;
     recognition.interimResults = true;
 
     recognition.onresult = (event) => {
-      let interim = "";
       let finalChunk = "";
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const result = event.results[i];
         const piece = result[0]?.transcript ?? "";
         if (result.isFinal) {
           finalChunk += piece;
-        } else {
-          interim += piece;
         }
       }
       if (finalChunk) {
-        finalTextRef.current = `${finalTextRef.current}${finalChunk}`.trim();
+        finalTextRef.current = `${finalTextRef.current} ${finalChunk}`.replace(
+          /\s+/g,
+          " ",
+        ).trim();
+        deliverIfReady();
       }
-      // 중간 결과는 무시하고, 최종만 전달 (아래 onend에서)
-      void interim;
     };
 
     recognition.onerror = (event) => {
-      setListening(false);
-      if (event.error === "aborted" || event.error === "no-speech") {
+      if (event.error === "aborted") return;
+      if (event.error === "no-speech") {
+        // 잠깐 침묵 — 계속 듣기
         return;
       }
+      setListening(false);
+      wantListenRef.current = false;
       if (event.error === "not-allowed") {
         onError?.(
           "마이크 권한이 필요합니다. 브라우저 주소창에서 마이크를 허용해 주세요.",
@@ -119,12 +151,43 @@ export function VoiceMicButton({
     };
 
     recognition.onend = () => {
+      recognitionRef.current = null;
+      if (deliveredRef.current) {
+        setListening(false);
+        return;
+      }
+      // 금액 없이 끊기면: 계속 들을지, 사용자가 끈 건지
+      if (wantListenRef.current) {
+        try {
+          const again = new Ctor();
+          again.lang = "ko-KR";
+          again.continuous = true;
+          again.interimResults = true;
+          again.onresult = recognition.onresult;
+          again.onerror = recognition.onerror;
+          again.onend = recognition.onend;
+          recognitionRef.current = again;
+          again.start();
+          setListening(true);
+        } catch {
+          setListening(false);
+          wantListenRef.current = false;
+          const text = finalTextRef.current.trim();
+          if (text && !hasAmount(text)) {
+            onError?.(
+              "금액까지 말씀해 주세요. 예: 오늘 커피 2000원",
+            );
+          }
+        }
+        return;
+      }
       setListening(false);
       const text = finalTextRef.current.trim();
-      if (text) {
-        onTranscript(text);
+      if (text && !hasAmount(text) && !deliveredRef.current) {
+        onError?.(
+          "금액까지 말씀해 주세요. 예: 오늘 커피 2000원",
+        );
       }
-      recognitionRef.current = null;
     };
 
     recognitionRef.current = recognition;
@@ -133,6 +196,7 @@ export function VoiceMicButton({
       setListening(true);
     } catch {
       setListening(false);
+      wantListenRef.current = false;
       onError?.("마이크를 시작할 수 없어요. 잠시 후 다시 시도해 주세요.");
     }
   }
@@ -157,7 +221,11 @@ export function VoiceMicButton({
       disabled={disabled}
       aria-pressed={listening}
       aria-label={listening ? "음성 인식 중지" : "음성으로 입력"}
-      title={listening ? "듣는 중… 다시 누르면 중지" : "음성으로 입력"}
+      title={
+        listening
+          ? "듣는 중… 금액까지 말한 뒤 자동 입력 (다시 누르면 중지)"
+          : "음성으로 입력 (금액까지 말씀해 주세요)"
+      }
       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
         listening
           ? "bg-[#ff3b30] text-white"
