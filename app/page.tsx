@@ -2912,22 +2912,30 @@ export default function Home() {
                   대분류 월 평균
                 </p>
                 <ul className="space-y-1">
-                  {categoryMonthlyAverage.categories.map((row) => (
-                    <li
-                      key={row.category}
-                      className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-                    >
-                      <p className="text-[14px] font-medium text-[#1d1d1f]">
-                        {row.category}
-                      </p>
-                      <p className="text-[14px] tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
-                        {formatAmount(row.average)}
-                        <span className="ml-0.5 text-[11px] text-[#86868b]">
-                          원
-                        </span>
-                      </p>
-                    </li>
-                  ))}
+                  {categoryMonthlyAverage.categories.map((row) => {
+                    const pct =
+                      monthlyAverage.average > 0
+                        ? ((row.average / monthlyAverage.average) * 100).toFixed(
+                            1,
+                          )
+                        : "0.0";
+                    return (
+                      <li
+                        key={row.category}
+                        className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                      >
+                        <p className="text-[14px] font-medium text-[#1d1d1f]">
+                          {row.category}
+                        </p>
+                        <p className="text-[14px] tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
+                          {formatAmount(row.average)}
+                          <span className="ml-0.5 text-[11px] text-[#86868b]">
+                            원({pct}%)
+                          </span>
+                        </p>
+                      </li>
+                    );
+                  })}
                 </ul>
                 <p className="px-1 text-[13px] font-medium text-[#86868b]">
                   월별 지출 (참고)
