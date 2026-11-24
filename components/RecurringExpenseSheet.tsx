@@ -14,9 +14,24 @@ import {
   NoAutofillInput,
 } from "@/components/NoAutofillField";
 import { noAutofillFormProps } from "@/lib/noAutofill";
-import type { RecurringExpense } from "@/lib/recurringStore";
+import type {
+  RecurringEditScope,
+  RecurringExpense,
+} from "@/lib/recurringStore";
 
 export { FIXED_INCOME_CATEGORY };
+
+export type RecurringSaveInput = {
+  id?: number;
+  description: string;
+  amount: number;
+  category: string;
+  subcategory: string;
+  interval_months: number;
+  start_date: string;
+  /** 수정 시에만: 이번만 / 이번과 이후 */
+  editScope?: RecurringEditScope;
+};
 
 type RecurringExpenseSheetProps = {
   open: boolean;
@@ -30,15 +45,7 @@ type RecurringExpenseSheetProps = {
   busy?: boolean;
   onClose: () => void;
   onCategoriesChanged?: () => Promise<void>;
-  onSave: (input: {
-    id?: number;
-    description: string;
-    amount: number;
-    category: string;
-    subcategory: string;
-    interval_months: number;
-    start_date: string;
-  }) => Promise<string | null>;
+  onSave: (input: RecurringSaveInput) => Promise<string | null>;
   onDelete: (id: number) => Promise<string | null>;
 };
 
@@ -91,6 +98,10 @@ export function RecurringExpenseSheet({
   const [startDate, setStartDate] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [scopeOpen, setScopeOpen] = useState(false);
+  const [pendingSave, setPendingSave] = useState<RecurringSaveInput | null>(
+    null,
+  );
 
   const subs = useMemo(() => {
     if (isIncome) {
@@ -136,6 +147,8 @@ export function RecurringExpenseSheet({
     setStartDate("");
     setFormError(null);
     setShowForm(false);
+    setScopeOpen(false);
+    setPendingSave(null);
   }
 
   useEffect(() => {
@@ -175,6 +188,19 @@ export function RecurringExpenseSheet({
     setSelectedId((prev) => (prev === id ? null : id));
   }
 
+  async function commitSave(input: RecurringSaveInput) {
+    const err = await onSave(input);
+    if (err) {
+      setFormError(err);
+      setScopeOpen(false);
+      setPendingSave(null);
+      return;
+    }
+    setScopeOpen(false);
+    setPendingSave(null);
+    resetForm();
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const n = Number(amount.replace(/,/g, ""));
@@ -195,7 +221,7 @@ export function RecurringExpenseSheet({
       setFormError("시작일을 선택해 주세요.");
       return;
     }
-    const err = await onSave({
+    const payload: RecurringSaveInput = {
       id: editingId ?? undefined,
       description: description.trim(),
       amount: n,
@@ -203,12 +229,20 @@ export function RecurringExpenseSheet({
       subcategory,
       interval_months: Math.round(interval),
       start_date: startDate,
-    });
-    if (err) {
-      setFormError(err);
+    };
+    // 수정 시 적용 범위 선택 (캘린더와 동일)
+    if (editingId != null) {
+      setPendingSave(payload);
+      setScopeOpen(true);
+      setFormError(null);
       return;
     }
-    resetForm();
+    await commitSave(payload);
+  }
+
+  async function handleScope(scope: RecurringEditScope) {
+    if (!pendingSave) return;
+    await commitSave({ ...pendingSave, editScope: scope });
   }
 
   if (!open) return null;
@@ -490,6 +524,62 @@ export function RecurringExpenseSheet({
               </div>
             </div>
           </form>
+        </div>
+      )}
+
+      {scopeOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="recurring-scope-title"
+            className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-[0_16px_48px_rgba(0,0,0,0.28)]"
+          >
+            <h3
+              id="recurring-scope-title"
+              className="text-[16px] font-semibold text-[#1d1d1f]"
+            >
+              어디에 적용할까요?
+            </h3>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-[#86868b]">
+              지나간 달은 그대로 두고, 선택한 범위만 바꿉니다.
+            </p>
+            <div className="mt-4 space-y-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleScope("this-only")}
+                className="w-full rounded-2xl bg-[#1d1d1f] py-3 text-left px-4 text-[14px] font-medium text-white disabled:opacity-40"
+              >
+                이번만
+                <span className="mt-0.5 block text-[12px] font-normal text-white/70">
+                  이번 달 내역만 수정합니다.
+                </span>
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleScope("this-and-future")}
+                className="w-full rounded-2xl bg-[#f5f5f7] py-3 text-left px-4 text-[14px] font-medium text-[#1d1d1f] disabled:opacity-40"
+              >
+                이번과 이후 모두
+                <span className="mt-0.5 block text-[12px] font-normal text-[#86868b]">
+                  이번 달부터 앞으로의 {title}에 적용합니다.
+                </span>
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setScopeOpen(false);
+                  setPendingSave(null);
+                }}
+                className="w-full py-2 text-[13px] text-[#86868b]"
+              >
+                취소
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

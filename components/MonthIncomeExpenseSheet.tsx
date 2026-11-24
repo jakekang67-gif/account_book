@@ -5,15 +5,14 @@ import { formatMonthLabel } from "@/lib/reports";
 type MonthIncomeExpenseSheetProps = {
   open: boolean;
   month: string;
-  /** 수입 = 월 예산 */
-  income: number | null;
+  /** 이번 달 수입 (정기+일반 자동 합산) */
+  income: number;
   expense: number;
-  /** 전체 기간 수입(예산) 합 */
-  totalIncome: number | null;
+  /** 전체 기간 수입 합 */
+  totalIncome: number;
   /** 전체 기간 지출 합 */
   totalExpense: number;
   onClose: () => void;
-  onEditIncome?: () => void;
 };
 
 function formatAmount(amount: number) {
@@ -25,7 +24,7 @@ function formatSigned(amount: number) {
   return formatAmount(amount);
 }
 
-/** 이번 달 수입·지출·결과 요약 */
+/** 이번 달 수입·지출·결과 요약 (수입은 자동 합산) */
 export function MonthIncomeExpenseSheet({
   open,
   month,
@@ -34,19 +33,17 @@ export function MonthIncomeExpenseSheet({
   totalIncome,
   totalExpense,
   onClose,
-  onEditIncome,
 }: MonthIncomeExpenseSheetProps) {
   if (!open) return null;
 
-  const hasIncome = income != null && income > 0;
+  const hasIncome = income > 0;
   const incomeValue = hasIncome ? income : 0;
-  // 수입 없으면 지출을 마이너스로 표시
   const expenseDisplay = hasIncome ? expense : -expense;
   const monthlyResult = hasIncome ? incomeValue - expense : -expense;
 
-  const hasTotalIncome = totalIncome != null && totalIncome > 0;
+  const hasTotalIncome = totalIncome > 0;
   const totalResult = hasTotalIncome
-    ? (totalIncome ?? 0) - totalExpense
+    ? totalIncome - totalExpense
     : -totalExpense;
 
   return (
@@ -128,29 +125,19 @@ export function MonthIncomeExpenseSheet({
           </tbody>
         </table>
 
-        {!hasIncome && (
-          <p className="mt-3 text-[13px] leading-relaxed text-[#86868b]">
-            수입(월 예산)이 없어 지출·결과를 마이너스로 표시합니다.
-          </p>
-        )}
+        <p className="mt-3 text-[12px] leading-relaxed text-[#86868b]">
+          수입은 정기 수입·일반 수입을 합산한 금액입니다.
+          {!hasIncome && " 이번 달 수입 내역이 없어 지출을 마이너스로 표시합니다."}
+        </p>
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-2xl bg-[#f5f5f7] py-2.5 text-[14px] font-medium text-[#1d1d1f]"
+            className="w-full rounded-2xl bg-[#1d1d1f] py-2.5 text-[14px] font-medium text-white"
           >
             닫기
           </button>
-          {onEditIncome && (
-            <button
-              type="button"
-              onClick={onEditIncome}
-              className="flex-1 rounded-2xl bg-[#1d1d1f] py-2.5 text-[14px] font-medium text-white"
-            >
-              {hasIncome ? "수입 수정" : "수입 설정"}
-            </button>
-          )}
         </div>
       </div>
     </div>

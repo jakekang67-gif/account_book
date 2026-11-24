@@ -139,6 +139,120 @@ export async function deleteRecurringExpense(id: number) {
   return { error: error?.message ?? null };
 }
 
+export type RecurringEditScope = "this-only" | "this-and-future";
+
+async function upsertRecurringExpenseForMonth(input: {
+  id: number;
+  description: string;
+  amount: number;
+  category: string;
+  subcategory: string;
+  start_date: string;
+  monthKey: string;
+}): Promise<{ error: string | null }> {
+  const today = koreaToday();
+  const date = recurringDateForMonth(input.start_date, input.monthKey);
+  // 아직 오지 않은 날짜는 저장하지 않음 (미리 넣으면 정리 로직에 지워짐)
+  if (date > today) {
+    return {
+      error:
+        "해당 달 내역이 아직 도래하지 않아 「이번만」을 적용할 수 없습니다. 「이번과 이후」를 선택하거나 도래 후 수정해 주세요.",
+    };
+  }
+
+  const marker = `[정기#${input.id}]`;
+  const description = `${marker} ${input.description.trim()}`;
+  const amount = Math.round(input.amount);
+
+  const { data: existing } = await supabase
+    .from("expenses")
+    .select("id")
+    .ilike("description", `${marker}%`)
+    .gte("date", `${input.monthKey}-01`)
+    .lte("date", `${input.monthKey}-31`)
+    .maybeSingle();
+
+  if (existing?.id) {
+    const { error } = await supabase
+      .from("expenses")
+      .update({
+        date,
+        amount,
+        description,
+        category: input.category,
+        subcategory: input.subcategory,
+      })
+      .eq("id", existing.id);
+    return { error: error?.message ?? null };
+  }
+
+  const { error } = await supabase.from("expenses").insert({
+    date,
+    amount,
+    description,
+    category: input.category,
+    subcategory: input.subcategory,
+  });
+  return { error: error?.message ?? null };
+}
+
+/**
+ * 이번 달만 수정: 정기 템플릿은 그대로 두고, 해당 달 expenses만 변경.
+ */
+export async function saveRecurringThisMonthOnly(input: {
+  id: number;
+  description: string;
+  amount: number;
+  category: string;
+  subcategory: string;
+  start_date: string;
+  monthKey: string;
+}): Promise<{ error: string | null }> {
+  return upsertRecurringExpenseForMonth(input);
+}
+
+/**
+ * 이번과 이후: 템플릿 수정 + 이번 달 이미 저장된 건 반영. 과거 달은 유지.
+ */
+export async function saveRecurringThisAndFuture(input: {
+  id: number;
+  description: string;
+  amount: number;
+  category: string;
+  subcategory: string;
+  interval_months: number;
+  start_date: string;
+  monthKey: string;
+}): Promise<{ error: string | null }> {
+  const saved = await saveRecurringExpense({
+    id: input.id,
+    description: input.description,
+    amount: input.amount,
+    category: input.category,
+    subcategory: input.subcategory,
+    interval_months: input.interval_months,
+    start_date: input.start_date,
+  });
+  if (saved.error) return { error: saved.error };
+
+  const today = koreaToday();
+  const date = recurringDateForMonth(input.start_date, input.monthKey);
+  if (date <= today) {
+    const instance = await upsertRecurringExpenseForMonth({
+      id: input.id,
+      description: input.description,
+      amount: input.amount,
+      category: input.category,
+      subcategory: input.subcategory,
+      start_date: input.start_date,
+      monthKey: input.monthKey,
+    });
+    if (instance.error) return instance;
+  }
+
+  return { error: null };
+}
+
 /**
  * 과거에 미리 넣었던 '아직 오지 않은 날짜'의 정기 지출 행을 제거합니다.
  */

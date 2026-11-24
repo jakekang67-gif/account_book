@@ -9,7 +9,6 @@ import {
 type AppMenuProps = {
   expenses: ExcelExpenseRow[];
   onOpenCategoryEditor?: () => void;
-  onOpenBudgetList?: () => void;
   onOpenMonthSummary?: () => void;
   onOpenRecurring?: () => void;
   onOpenRecurringIncome?: () => void;
@@ -26,7 +25,6 @@ type AppMenuProps = {
 export function AppMenu({
   expenses,
   onOpenCategoryEditor,
-  onOpenBudgetList,
   onOpenMonthSummary,
   onOpenRecurring,
   onOpenRecurringIncome,
@@ -133,18 +131,6 @@ export function AppMenu({
                 className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
               >
                 정기 수입
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onOpenBudgetList?.();
-                }}
-                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
-              >
-                월 예산 목록
               </button>
             </li>
             <li>

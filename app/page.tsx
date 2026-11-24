@@ -11,8 +11,6 @@ import {
 } from "@/lib/appLock";
 import { MonthIncomeExpenseSheet } from "@/components/MonthIncomeExpenseSheet";
 import { useAuth } from "@/components/AuthProvider";
-import { BudgetEditor } from "@/components/BudgetEditor";
-import { BudgetList } from "@/components/BudgetList";
 import { CategoryEditor } from "@/components/CategoryEditor";
 import { ChatCleanupMenu } from "@/components/ChatCleanupMenu";
 import { ChatNoticeBanner } from "@/components/ChatNoticeBanner";
@@ -28,18 +26,6 @@ import { CategoryPieChart } from "@/components/CategoryPieChart";
 import { LoginForm } from "@/components/LoginForm";
 import { MonthlyBarChart } from "@/components/MonthlyBarChart";
 import { VoiceMicButton } from "@/components/VoiceMicButton";
-import {
-  loadBudgetAlertPercent,
-  playBudgetWarningSound,
-  saveBudgetAlertPercent,
-} from "@/lib/budgetAlert";
-import {
-  clearMonthlyBudget,
-  loadMonthlyBudget,
-  loadMonthlyBudgets,
-  saveMonthlyBudget,
-  type MonthlyBudget,
-} from "@/lib/budgetStore";
 import {
   DEFAULT_CATEGORY_TREE,
   type Category,
@@ -80,6 +66,8 @@ import {
   deleteRecurringExpense,
   loadRecurringExpenses,
   saveRecurringExpense,
+  saveRecurringThisAndFuture,
+  saveRecurringThisMonthOnly,
   summarizeRecurringForMonth,
   type RecurringExpense,
 } from "@/lib/recurringStore";
@@ -92,9 +80,12 @@ import {
   listMonths,
   monthKeyFromDate,
   resolveStatsMonthKey,
+  sumIncomeAll,
+  sumIncomeForMonth,
   summarizeByCategory,
   summarizeByMonth,
   summarizeBySubcategory,
+  summarizeIncomeByMonth,
 } from "@/lib/reports";
 import {
   formatStatsConfirmQuestion,
@@ -413,8 +404,11 @@ export default function Home() {
   const [saveToDateBusy, setSaveToDateBusy] = useState(false);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
-  const [budgetListOpen, setBudgetListOpen] = useState(false);
   const [monthSummaryOpen, setMonthSummaryOpen] = useState(false);
+  /** 월별 탭: 지출/수입 (탭 진입 시 항상 지출) */
+  const [monthlyKind, setMonthlyKind] = useState<"expense" | "income">(
+    "expense",
+  );
   const [recurringOpen, setRecurringOpen] = useState(false);
   const [recurringIncomeOpen, setRecurringIncomeOpen] = useState(false);
   const [recurringRows, setRecurringRows] = useState<RecurringExpense[]>([]);
@@ -432,16 +426,6 @@ export default function Home() {
   );
   const [appLockChecked, setAppLockChecked] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
-  const [budgetEditorOpen, setBudgetEditorOpen] = useState(false);
-  const [editingBudgetMonth, setEditingBudgetMonth] = useState("");
-  const [editingBudgetAmount, setEditingBudgetAmount] = useState<number | null>(
-    null,
-  );
-  const [monthBudget, setMonthBudget] = useState<number | null>(null);
-  const [budgetRows, setBudgetRows] = useState<MonthlyBudget[]>([]);
-  const [budgetListLoading, setBudgetListLoading] = useState(false);
-  const [budgetError, setBudgetError] = useState<string | null>(null);
-  const [budgetAlertPercent, setBudgetAlertPercent] = useState(80);
   const [categoryLoadError, setCategoryLoadError] = useState<string | null>(
     null,
   );
@@ -451,8 +435,6 @@ export default function Home() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   /** 전송 시 포커스를 옮겨 모바일 키보드를 내리기 위한 숨김 대상 */
   const keyboardDismissRef = useRef<HTMLButtonElement>(null);
-  const budgetAlertReadyRef = useRef(false);
-  const budgetWasOverRef = useRef(false);
 
   const categoryOptions = useMemo(
     () => Object.keys(categoryTree),
@@ -477,6 +459,16 @@ export default function Home() {
   const monthlyTotals = useMemo(
     () => summarizeByMonth(occurredExpenses),
     [occurredExpenses],
+  );
+
+  const monthlyIncomeTotals = useMemo(
+    () => summarizeIncomeByMonth(occurredExpenses),
+    [occurredExpenses],
+  );
+
+  const monthlyTabRows = useMemo(
+    () => (monthlyKind === "income" ? monthlyIncomeTotals : monthlyTotals),
+    [monthlyKind, monthlyIncomeTotals, monthlyTotals],
   );
 
   const availableMonths = useMemo(
@@ -519,6 +511,17 @@ export default function Home() {
     [occurredExpenses],
   );
 
+  const thisMonthIncome = useMemo(
+    () =>
+      currentMonth ? sumIncomeForMonth(occurredExpenses, currentMonth) : 0,
+    [occurredExpenses, currentMonth],
+  );
+
+  const totalIncomeAll = useMemo(
+    () => sumIncomeAll(occurredExpenses),
+    [occurredExpenses],
+  );
+
   const monthlyAverage = useMemo(
     () => averageMonthlyExpense(occurredExpenses),
     [occurredExpenses],
@@ -528,13 +531,6 @@ export default function Home() {
     () => averageMonthlyByCategory(occurredExpenses),
     [occurredExpenses],
   );
-
-  const totalIncomeAll = useMemo(() => {
-    const fromRows = budgetRows.reduce((sum, row) => sum + row.amount, 0);
-    if (fromRows > 0) return fromRows;
-    if (monthBudget != null && monthBudget > 0) return monthBudget;
-    return null;
-  }, [budgetRows, monthBudget]);
 
   const categorySubTotals = useMemo(() => {
     if (!reportMonth || !expandedCategory) return [];
@@ -549,12 +545,16 @@ export default function Home() {
     const today = koreaToday();
     setTodayMax(today);
     setCurrentMonth(today.slice(0, 7));
-    setBudgetAlertPercent(loadBudgetAlertPercent());
   }, []);
 
   useEffect(() => {
     setExpandedCategory(null);
   }, [reportMonth]);
+
+  // 월별 탭에 들어올 때마다 항상 지출부터
+  useEffect(() => {
+    if (tab === "monthly") setMonthlyKind("expense");
+  }, [tab]);
 
   // 환영 안내: 이 세션에서 아직 안 보여줬을 때만 (다른 앱 갔다 와도 재표시 안 함)
   useEffect(() => {
@@ -625,11 +625,6 @@ export default function Home() {
       setCategoryTree(DEFAULT_CATEGORY_TREE);
       setLoadingExpenses(false);
       setCategoryLoadError(null);
-      setMonthBudget(null);
-      setBudgetRows([]);
-      setBudgetError(null);
-      budgetAlertReadyRef.current = false;
-      budgetWasOverRef.current = false;
       chatDraftReadyRef.current = false;
       setMessages([WELCOME_MESSAGE]);
       setPendingExpense(null);
@@ -792,39 +787,6 @@ export default function Home() {
     };
   }, [user?.id]);
 
-  useEffect(() => {
-    if (!user || !currentMonth) return;
-    budgetAlertReadyRef.current = false;
-    budgetWasOverRef.current = false;
-    void refreshBudget();
-  }, [user?.id, currentMonth]);
-
-  // 이번 달 지출이 경고 기준 %에 처음 도달하면 경고음
-  useEffect(() => {
-    if (!currentMonth || monthBudget == null || monthBudget <= 0) return;
-    if (loadingExpenses) return;
-
-    const percent = (thisMonthSpent / monthBudget) * 100;
-    const over = percent >= budgetAlertPercent;
-
-    if (!budgetAlertReadyRef.current) {
-      budgetWasOverRef.current = over;
-      budgetAlertReadyRef.current = true;
-      return;
-    }
-
-    if (over && !budgetWasOverRef.current) {
-      playBudgetWarningSound();
-    }
-    budgetWasOverRef.current = over;
-  }, [
-    thisMonthSpent,
-    monthBudget,
-    currentMonth,
-    budgetAlertPercent,
-    loadingExpenses,
-  ]);
-
   function scrollChatToBottom(behavior: ScrollBehavior = "smooth") {
     const el = chatScrollRef.current;
     if (!el) return;
@@ -959,42 +921,6 @@ export default function Home() {
     setCategoryTree(result.tree);
     setCategoryRows(result.rows);
     setCategoryLoadError(result.error);
-  }
-
-  async function refreshBudget() {
-    const result = await loadMonthlyBudget(currentMonth);
-    if (result.error) {
-      setBudgetError(result.error);
-      setMonthBudget(null);
-      return;
-    }
-    setBudgetError(null);
-    setMonthBudget(result.budget?.amount ?? null);
-  }
-
-  async function refreshBudgetList() {
-    setBudgetListLoading(true);
-    const result = await loadMonthlyBudgets();
-    setBudgetListLoading(false);
-    if (result.error) {
-      setBudgetError(result.error);
-      setBudgetRows([]);
-      return;
-    }
-    setBudgetError(null);
-    setBudgetRows(result.budgets);
-  }
-
-  function openBudgetEditor(month: string, amount: number | null) {
-    if (!month) return;
-    setEditingBudgetMonth(month);
-    setEditingBudgetAmount(amount);
-    setBudgetEditorOpen(true);
-  }
-
-  async function openBudgetList() {
-    setBudgetListOpen(true);
-    await refreshBudgetList();
   }
 
   async function refreshRecurring() {
@@ -2209,7 +2135,9 @@ export default function Home() {
       : tab === "input"
         ? "직접 입력"
         : tab === "monthly"
-          ? "월별 지출"
+          ? monthlyKind === "income"
+            ? "월별 수입"
+            : "월별 지출"
           : tab === "average"
             ? "월 평균 지출"
             : "카테고리별 지출";
@@ -2284,11 +2212,7 @@ export default function Home() {
             <AppMenu
               expenses={occurredExpenses}
               onOpenCategoryEditor={() => setCategoryEditorOpen(true)}
-              onOpenBudgetList={() => void openBudgetList()}
-              onOpenMonthSummary={() => {
-                void refreshBudgetList();
-                setMonthSummaryOpen(true);
-              }}
+              onOpenMonthSummary={() => setMonthSummaryOpen(true)}
               onOpenRecurring={() => void openRecurringSheet()}
               onOpenRecurringIncome={() => void openRecurringIncomeSheet()}
               onOpenInstallHelp={() => setInstallHelpOpen(true)}
@@ -2314,14 +2238,6 @@ export default function Home() {
             카테고리 DB 연결 확인: {categoryLoadError}
             {" · "}
             SQL로 category_items 테이블을 만들어 주세요.
-          </p>
-        )}
-
-        {budgetError && (
-          <p className="bg-[#fff4e5] px-4 py-2 text-center text-[12px] text-[#8a6116]">
-            예산 DB 연결 확인: {budgetError}
-            {" · "}
-            SQL로 monthly_budgets 테이블을 만들어 주세요.
           </p>
         )}
 
@@ -2711,27 +2627,53 @@ export default function Home() {
 
         {tab === "monthly" && (
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            <div className="mb-3 flex rounded-xl bg-[#ebebed] p-1">
+              <button
+                type="button"
+                onClick={() => setMonthlyKind("expense")}
+                className={`flex-1 rounded-lg py-2 text-[13px] font-medium transition ${
+                  monthlyKind === "expense"
+                    ? "bg-white text-[#1d1d1f] shadow-sm"
+                    : "text-[#86868b]"
+                }`}
+              >
+                지출
+              </button>
+              <button
+                type="button"
+                onClick={() => setMonthlyKind("income")}
+                className={`flex-1 rounded-lg py-2 text-[13px] font-medium transition ${
+                  monthlyKind === "income"
+                    ? "bg-white text-[#1d1d1f] shadow-sm"
+                    : "text-[#86868b]"
+                }`}
+              >
+                수입
+              </button>
+            </div>
             {loadingExpenses ? (
               <p className="rounded-2xl bg-white px-4 py-8 text-center text-[14px] text-[#86868b]">
                 불러오는 중...
               </p>
-            ) : monthlyTotals.length === 0 ? (
+            ) : monthlyTabRows.length === 0 ? (
               <p className="rounded-2xl bg-white px-4 py-8 text-center text-[14px] text-[#86868b]">
-                아직 집계할 내역이 없습니다.
+                {monthlyKind === "income"
+                  ? "아직 집계할 수입이 없습니다."
+                  : "아직 집계할 내역이 없습니다."}
               </p>
             ) : (
               <div className="space-y-3">
                 <p className="px-1 text-[13px] font-medium text-[#86868b]">
-                  월별 총 지출
+                  {monthlyKind === "income" ? "월별 총 수입" : "월별 총 지출"}
                 </p>
                 {!appMenuOpen && (
                   <MonthlyBarChart
-                    data={monthlyTotals}
+                    data={monthlyTabRows}
                     currentMonth={currentMonth}
                   />
                 )}
                 <ul className="space-y-2">
-                  {monthlyTotals.map((row) => (
+                  {monthlyTabRows.map((row) => (
                     <li
                       key={row.month}
                       className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
@@ -3179,15 +3121,11 @@ export default function Home() {
       <MonthIncomeExpenseSheet
         open={monthSummaryOpen}
         month={currentMonth}
-        income={monthBudget}
+        income={thisMonthIncome}
         expense={thisMonthSpent}
         totalIncome={totalIncomeAll}
         totalExpense={totalExpenseAll}
         onClose={() => setMonthSummaryOpen(false)}
-        onEditIncome={() => {
-          setMonthSummaryOpen(false);
-          openBudgetEditor(currentMonth, monthBudget);
-        }}
       />
 
       <RecurringExpenseSheet
@@ -3201,11 +3139,36 @@ export default function Home() {
         onClose={() => setRecurringOpen(false)}
         onSave={async (input) => {
           setRecurringBusy(true);
-          const result = await saveRecurringExpense(input);
+          const monthKey = currentMonth || koreaToday().slice(0, 7);
+          let result: { error: string | null };
+
+          if (input.id != null && input.editScope === "this-only") {
+            result = await saveRecurringThisMonthOnly({
+              id: input.id,
+              description: input.description,
+              amount: input.amount,
+              category: input.category,
+              subcategory: input.subcategory,
+              start_date: input.start_date,
+              monthKey,
+            });
+          } else if (input.id != null && input.editScope === "this-and-future") {
+            result = await saveRecurringThisAndFuture({
+              id: input.id,
+              description: input.description,
+              amount: input.amount,
+              category: input.category,
+              subcategory: input.subcategory,
+              interval_months: input.interval_months,
+              start_date: input.start_date,
+              monthKey,
+            });
+          } else {
+            result = await saveRecurringExpense(input);
+          }
+
           if (!result.error) {
-            const applied = await applyDueRecurringExpenses(
-              currentMonth || koreaToday().slice(0, 7),
-            );
+            const applied = await applyDueRecurringExpenses(monthKey);
             if (applied.error) setRecurringError(applied.error);
             await refreshRecurring();
             await loadExpenses();
@@ -3235,14 +3198,40 @@ export default function Home() {
         onCategoriesChanged={refreshCategories}
         onSave={async (input) => {
           setRecurringBusy(true);
-          const result = await saveRecurringExpense({
+          const monthKey = currentMonth || koreaToday().slice(0, 7);
+          const withCategory = {
             ...input,
             category: FIXED_INCOME_CATEGORY,
-          });
+          };
+          let result: { error: string | null };
+
+          if (input.id != null && input.editScope === "this-only") {
+            result = await saveRecurringThisMonthOnly({
+              id: input.id,
+              description: withCategory.description,
+              amount: withCategory.amount,
+              category: withCategory.category,
+              subcategory: withCategory.subcategory,
+              start_date: withCategory.start_date,
+              monthKey,
+            });
+          } else if (input.id != null && input.editScope === "this-and-future") {
+            result = await saveRecurringThisAndFuture({
+              id: input.id,
+              description: withCategory.description,
+              amount: withCategory.amount,
+              category: withCategory.category,
+              subcategory: withCategory.subcategory,
+              interval_months: withCategory.interval_months,
+              start_date: withCategory.start_date,
+              monthKey,
+            });
+          } else {
+            result = await saveRecurringExpense(withCategory);
+          }
+
           if (!result.error) {
-            const applied = await applyDueRecurringExpenses(
-              currentMonth || koreaToday().slice(0, 7),
-            );
+            const applied = await applyDueRecurringExpenses(monthKey);
             if (applied.error) setRecurringError(applied.error);
             await refreshRecurring();
             await loadExpenses();
@@ -3256,63 +3245,6 @@ export default function Home() {
           if (!result.error) await refreshRecurring();
           setRecurringBusy(false);
           return result.error;
-        }}
-      />
-
-      <BudgetList
-        open={budgetListOpen}
-        rows={budgetRows}
-        currentMonth={currentMonth}
-        alertPercent={budgetAlertPercent}
-        loading={budgetListLoading}
-        error={budgetError}
-        onClose={() => setBudgetListOpen(false)}
-        onSelect={(month, amount) => {
-          setBudgetListOpen(false);
-          openBudgetEditor(month, amount);
-        }}
-        onAddCurrent={() => {
-          setBudgetListOpen(false);
-          openBudgetEditor(currentMonth, monthBudget);
-        }}
-        onAlertPercentChange={(percent) => {
-          const next = saveBudgetAlertPercent(percent);
-          setBudgetAlertPercent(next);
-          // 기준을 바꾸면, 이미 넘긴 상태여도 다시 아래에서 올라올 때만 울리도록 초기화
-          budgetAlertReadyRef.current = false;
-        }}
-      />
-
-      <BudgetEditor
-        open={budgetEditorOpen}
-        month={editingBudgetMonth}
-        currentAmount={editingBudgetAmount}
-        onClose={() => setBudgetEditorOpen(false)}
-        onSave={async (amount) => {
-          const month = editingBudgetMonth;
-          if (!month) return "월 정보가 없습니다.";
-          const result = await saveMonthlyBudget(month, amount);
-          if (result.error) return result.error;
-          setEditingBudgetAmount(result.budget?.amount ?? amount);
-          if (month === currentMonth) {
-            setMonthBudget(result.budget?.amount ?? amount);
-          }
-          setBudgetError(null);
-          void refreshBudgetList();
-          return null;
-        }}
-        onClear={async () => {
-          const month = editingBudgetMonth;
-          if (!month) return "월 정보가 없습니다.";
-          const result = await clearMonthlyBudget(month);
-          if (result.error) return result.error;
-          setEditingBudgetAmount(null);
-          if (month === currentMonth) {
-            setMonthBudget(null);
-          }
-          setBudgetError(null);
-          void refreshBudgetList();
-          return null;
         }}
       />
     </div>
