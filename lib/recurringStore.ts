@@ -1,6 +1,30 @@
 import { koreaRecurringReflectDate, koreaToday } from "@/lib/date";
+import { normalizeExpenseDescription } from "@/lib/expenseDescription";
 import { monthKeyFromDate } from "@/lib/reports";
 import { supabase } from "@/lib/supabase";
+
+/** 동시 호출 시 한 번만 실행 (중복 insert 방지) */
+let applyDueInflight: Promise<{
+  applied: number;
+  removedFuture: number;
+  error: string | null;
+}> | null = null;
+
+function stripRecurringMarker(description: string) {
+  return description.replace(/^\[정기#\d+\]\s*/u, "").trim();
+}
+
+/** 같은 날·같은 금액 비교용: 내용이 같거나 한쪽이 다른 쪽을 포함 */
+export function recurringDescriptionsSimilar(a: string, b: string) {
+  const na = normalizeExpenseDescription(stripRecurringMarker(a))
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  const nb = normalizeExpenseDescription(stripRecurringMarker(b))
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  if (!na || !nb) return false;
+  return na === nb || na.includes(nb) || nb.includes(na);
+}
 
 export type RecurringExpense = {
   id: number;
@@ -331,12 +355,110 @@ export async function removeFutureRecurringExpenseRows(): Promise<{
 }
 
 /**
- * 주기 도래한 정기 지출을 expenses에 자동 저장.
- * - 예정일 ≤ 반영 기준일(당일 오전 10시)인 달만 삽입
- * - last_applied와 무관하게 누락 행은 다시 넣음 (중복은 marker+달로 방지)
+ * 같은 달 [정기#id] 중복을 1건만 남기고 삭제. 남긴 행 id를 반환.
  */
-export async function applyDueRecurringExpenses(
-  currentMonth = koreaToday().slice(0, 7),
+async function dedupeRecurringMarkerInMonth(
+  marker: string,
+  month: string,
+  keep: {
+    date: string;
+    amount: number;
+    description: string;
+    category: string;
+    subcategory: string;
+  },
+): Promise<{ keptId: number | null; removed: number; error: string | null }> {
+  const { data: rows, error } = await supabase
+    .from("expenses")
+    .select("id, date, amount")
+    .ilike("description", `${marker}%`)
+    .gte("date", `${month}-01`)
+    .lte("date", `${month}-31`)
+    .order("id", { ascending: true });
+
+  if (error) return { keptId: null, removed: 0, error: error.message };
+  const list = rows ?? [];
+  if (list.length === 0) return { keptId: null, removed: 0, error: null };
+
+  const keeper = list[0];
+  const extraIds = list.slice(1).map((r) => r.id as number);
+  let removed = 0;
+  if (extraIds.length > 0) {
+    const { error: delError } = await supabase
+      .from("expenses")
+      .delete()
+      .in("id", extraIds);
+    if (delError) {
+      return { keptId: keeper.id as number, removed: 0, error: delError.message };
+    }
+    removed = extraIds.length;
+  }
+
+  if (
+    keeper.date !== keep.date ||
+    Number(keeper.amount) !== keep.amount
+  ) {
+    const { error: updateError } = await supabase
+      .from("expenses")
+      .update({
+        date: keep.date,
+        amount: keep.amount,
+        description: keep.description,
+        category: keep.category,
+        subcategory: keep.subcategory,
+      })
+      .eq("id", keeper.id);
+    if (updateError) {
+      return {
+        keptId: keeper.id as number,
+        removed,
+        error: updateError.message,
+      };
+    }
+  }
+
+  return { keptId: keeper.id as number, removed, error: null };
+}
+
+/**
+ * 정기 건과 같은 날·같은 금액·비슷한 내용의 수동 지출은 삭제 (정기 건 유지).
+ */
+async function removeSimilarManualDuplicates(input: {
+  marker: string;
+  date: string;
+  amount: number;
+  baseDescription: string;
+}): Promise<{ removed: number; error: string | null }> {
+  const { data: candidates, error } = await supabase
+    .from("expenses")
+    .select("id, description, amount")
+    .eq("date", input.date)
+    .eq("amount", input.amount);
+
+  if (error) return { removed: 0, error: error.message };
+
+  const toDelete: number[] = [];
+  for (const row of candidates ?? []) {
+    const desc = String(row.description ?? "");
+    // 정기 marker 행은 유지
+    if (desc.includes(input.marker)) continue;
+    if (recurringDescriptionsSimilar(desc, input.baseDescription)) {
+      toDelete.push(row.id as number);
+    }
+  }
+
+  if (toDelete.length === 0) return { removed: 0, error: null };
+
+  const { error: delError } = await supabase
+    .from("expenses")
+    .delete()
+    .in("id", toDelete);
+  if (delError) return { removed: 0, error: delError.message };
+  return { removed: toDelete.length, error: null };
+}
+
+async function applyDueRecurringExpensesInner(
+  currentMonth: string,
 ): Promise<{ applied: number; removedFuture: number; error: string | null }> {
   const cleaned = await removeFutureRecurringExpenseRows();
   if (cleaned.error) {
@@ -348,6 +470,7 @@ export async function applyDueRecurringExpenses(
 
   const reflectDate = koreaRecurringReflectDate();
   let applied = 0;
+  let removedExtra = cleaned.removed;
 
   for (const row of rows) {
     const months = intervalMonthsForRecurring(
@@ -366,16 +489,23 @@ export async function applyDueRecurringExpenses(
       const date = recurringDateForMonth(row.start_date, month);
       const description = `${marker} ${row.description}`;
 
-      // 같은 정기 id + 같은 달이면 중복 삽입하지 않음 (날짜가 달라도 1건만)
-      const { data: existing } = await supabase
-        .from("expenses")
-        .select("id, date, amount")
-        .ilike("description", `${marker}%`)
-        .gte("date", `${month}-01`)
-        .lte("date", `${month}-31`)
-        .maybeSingle();
+      const deduped = await dedupeRecurringMarkerInMonth(marker, month, {
+        date,
+        amount: row.amount,
+        description,
+        category: row.category,
+        subcategory: row.subcategory,
+      });
+      if (deduped.error) {
+        return {
+          applied,
+          removedFuture: removedExtra,
+          error: deduped.error,
+        };
+      }
+      removedExtra += deduped.removed;
 
-      if (!existing) {
+      if (deduped.keptId == null) {
         const { error: insertError } = await supabase.from("expenses").insert({
           date,
           amount: row.amount,
@@ -386,34 +516,28 @@ export async function applyDueRecurringExpenses(
         if (insertError) {
           return {
             applied,
-            removedFuture: cleaned.removed,
+            removedFuture: removedExtra,
             error: insertError.message,
           };
         }
         applied += 1;
-      } else if (
-        existing.date !== date ||
-        Number(existing.amount) !== row.amount
-      ) {
-        // 예정일·금액이 어긋난 기존 행은 교정
-        const { error: updateError } = await supabase
-          .from("expenses")
-          .update({
-            date,
-            amount: row.amount,
-            description,
-            category: row.category,
-            subcategory: row.subcategory,
-          })
-          .eq("id", existing.id);
-        if (updateError) {
-          return {
-            applied,
-            removedFuture: cleaned.removed,
-            error: updateError.message,
-          };
-        }
       }
+
+      // 같은 날·금액·유사 내용의 수동 입력은 생략(삭제), 정기 건만 유지
+      const manual = await removeSimilarManualDuplicates({
+        marker,
+        date,
+        amount: row.amount,
+        baseDescription: row.description,
+      });
+      if (manual.error) {
+        return {
+          applied,
+          removedFuture: removedExtra,
+          error: manual.error,
+        };
+      }
+      removedExtra += manual.removed;
 
       lastOk = month;
     }
@@ -429,7 +553,30 @@ export async function applyDueRecurringExpenses(
     }
   }
 
-  return { applied, removedFuture: cleaned.removed, error: null };
+  return { applied, removedFuture: removedExtra, error: null };
+}
+
+/**
+ * 주기 도래한 정기 지출을 expenses에 자동 저장.
+ * - 예정일 ≤ 반영 기준일(당일 오전 10시)인 달만 삽입
+ * - 같은 [정기#id]·같은 달은 1건만 유지
+ * - 같은 날·금액·유사 내용 수동 건은 삭제(정기 유지)
+ * - 동시 호출은 하나로 합침
+ */
+export async function applyDueRecurringExpenses(
+  currentMonth = koreaToday().slice(0, 7),
+): Promise<{ applied: number; removedFuture: number; error: string | null }> {
+  if (applyDueInflight) return applyDueInflight;
+
+  applyDueInflight = (async () => {
+    try {
+      return await applyDueRecurringExpensesInner(currentMonth);
+    } finally {
+      applyDueInflight = null;
+    }
+  })();
+
+  return applyDueInflight;
 }
 
 /**

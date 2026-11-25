@@ -690,11 +690,8 @@ export default function Home() {
 
     const previousUserId = user.id;
     void refreshCategories();
-    void (async () => {
-      const applied = await applyDueRecurringExpenses();
-      if (applied.error) setRecurringError(applied.error);
-      await loadExpenses();
-    })();
+    // 정기 반영은 recurringReflectDate effect에서만 수행 (중복 실행·중복 insert 방지)
+    void loadExpenses();
 
     // 로그인 사용자별 채팅 초안 복구
     chatDraftReadyRef.current = false;
@@ -997,7 +994,7 @@ export default function Home() {
       currentMonth || koreaToday().slice(0, 7),
     );
     if (applied.error) setRecurringError(applied.error);
-    if (applied.applied > 0 || applied.removedFuture > 0) await loadExpenses();
+    await loadExpenses();
     await refreshRecurring();
   }
 
@@ -1009,7 +1006,7 @@ export default function Home() {
       currentMonth || koreaToday().slice(0, 7),
     );
     if (applied.error) setRecurringError(applied.error);
-    if (applied.applied > 0 || applied.removedFuture > 0) await loadExpenses();
+    await loadExpenses();
     await refreshRecurring();
   }
 
