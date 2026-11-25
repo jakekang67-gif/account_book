@@ -1,4 +1,9 @@
-import { koreaDateString, koreaHour, koreaToday } from "@/lib/date";
+import {
+  koreaDateString,
+  koreaHour,
+  koreaToday,
+  RECURRING_REFLECT_HOUR,
+} from "@/lib/date";
 import {
   dueMonthsForRecurring,
   recurringDateForMonth,
@@ -7,8 +12,8 @@ import {
 } from "@/lib/recurringStore";
 
 const STORAGE_PREFIX = "account_book_recurring_remind_v1:";
-/** 알림·대화창 안내를 띄우기 시작하는 한국 시간 (시) */
-export const RECURRING_REMIND_HOUR = 10;
+/** 알림·대화창 안내를 띄우기 시작하는 한국 시간 (시) — 내역 반영과 동일 */
+export const RECURRING_REMIND_HOUR = RECURRING_REFLECT_HOUR;
 
 export type RecurringReminderKind = "eve" | "day";
 

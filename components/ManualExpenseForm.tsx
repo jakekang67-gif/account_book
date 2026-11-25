@@ -13,6 +13,8 @@ type ManualExpenseFormProps = {
   categoryTree: CategoryTree;
   todayMax: string;
   busy?: boolean;
+  /** 상단 메뉴가 열리면 native date가 메뉴 위로 뜨지 않도록 숨김 */
+  hideNativeDate?: boolean;
   onSave: (payload: {
     date: string;
     amount: number;
@@ -30,6 +32,7 @@ export function ManualExpenseForm({
   categoryTree,
   todayMax,
   busy,
+  hideNativeDate = false,
   onSave,
 }: ManualExpenseFormProps) {
   const categories = Object.keys(categoryTree);
@@ -108,21 +111,26 @@ export function ManualExpenseForm({
         날짜·금액·내용·분류를 직접 입력해 저장합니다.
       </p>
 
-      <label className="block">
-        <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">날짜</span>
-        <div className="relative">
-          <AutofillDecoys />
-          <NoAutofillInput
-            type="date"
-            name="manual-expense-date"
-            value={date}
-            max={todayMax || undefined}
-            onChange={(e) => setDate(e.target.value)}
-            className={fieldClass}
-            disabled={busy}
-          />
-        </div>
-      </label>
+      {/* 메뉴 열림 시 native date가 오버레이 위로 남는 갤럭시 버그 방지 */}
+      {!hideNativeDate && (
+        <label className="block">
+          <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">
+            날짜
+          </span>
+          <div className="relative">
+            <AutofillDecoys />
+            <NoAutofillInput
+              type="date"
+              name="manual-expense-date"
+              value={date}
+              max={todayMax || undefined}
+              onChange={(e) => setDate(e.target.value)}
+              className={fieldClass}
+              disabled={busy}
+            />
+          </div>
+        </label>
+      )}
 
       <label className="block">
         <span className="mb-1.5 block px-1 text-[13px] text-[#86868b]">금액</span>

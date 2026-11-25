@@ -42,3 +42,20 @@ export function koreaHour() {
   }).formatToParts(new Date());
   return Number(parts.find((p) => p.type === "hour")?.value ?? 0);
 }
+
+/** 정기 지출·수입을 내역에 반영하기 시작하는 한국 시각 (시) */
+export const RECURRING_REFLECT_HOUR = 10;
+
+/**
+ * 정기 항목 반영 기준일 (YYYY-MM-DD).
+ * 당일 오전 RECURRING_REFLECT_HOUR 시 전이면 어제, 이후면 오늘.
+ */
+export function koreaRecurringReflectDate(hour = koreaHour()) {
+  if (hour < RECURRING_REFLECT_HOUR) return koreaDateString(-1);
+  return koreaToday();
+}
+
+/** description이 정기 자동반영 건인지 ([정기#id] 접두) */
+export function isRecurringExpenseDescription(description: string) {
+  return /^\[정기#\d+\]/.test(description.trim());
+}

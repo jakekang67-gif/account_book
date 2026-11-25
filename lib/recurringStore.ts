@@ -1,4 +1,4 @@
-import { koreaToday } from "@/lib/date";
+import { koreaRecurringReflectDate, koreaToday } from "@/lib/date";
 import { monthKeyFromDate } from "@/lib/reports";
 import { supabase } from "@/lib/supabase";
 
@@ -150,13 +150,13 @@ async function upsertRecurringExpenseForMonth(input: {
   start_date: string;
   monthKey: string;
 }): Promise<{ error: string | null }> {
-  const today = koreaToday();
+  const reflectDate = koreaRecurringReflectDate();
   const date = recurringDateForMonth(input.start_date, input.monthKey);
-  // 아직 오지 않은 날짜는 저장하지 않음 (미리 넣으면 정리 로직에 지워짐)
-  if (date > today) {
+  // 오전 10시 전·미래 날짜는 저장하지 않음 (미리 넣으면 정리 로직에 지워짐)
+  if (date > reflectDate) {
     return {
       error:
-        "해당 달 내역이 아직 도래하지 않아 「이번만」을 적용할 수 없습니다. 「이번과 이후」를 선택하거나 도래 후 수정해 주세요.",
+        "해당 달 내역이 아직 도래하지 않아 「이번만」을 적용할 수 없습니다. 「이번과 이후」를 선택하거나 도래 후(오전 10시 이후) 수정해 주세요.",
     };
   }
 
@@ -235,9 +235,9 @@ export async function saveRecurringThisAndFuture(input: {
   });
   if (saved.error) return { error: saved.error };
 
-  const today = koreaToday();
+  const reflectDate = koreaRecurringReflectDate();
   const date = recurringDateForMonth(input.start_date, input.monthKey);
-  if (date <= today) {
+  if (date <= reflectDate) {
     const instance = await upsertRecurringExpenseForMonth({
       id: input.id,
       description: input.description,
@@ -254,18 +254,18 @@ export async function saveRecurringThisAndFuture(input: {
 }
 
 /**
- * 과거에 미리 넣었던 '아직 오지 않은 날짜'의 정기 지출 행을 제거합니다.
+ * 반영 기준일(오전 10시) 이후·미래로 미리 들어간 정기 행을 제거합니다.
  */
 export async function removeFutureRecurringExpenseRows(): Promise<{
   removed: number;
   error: string | null;
 }> {
-  const today = koreaToday();
+  const reflectDate = koreaRecurringReflectDate();
   const { data, error } = await supabase
     .from("expenses")
     .delete()
     .ilike("description", "[정기#%")
-    .gt("date", today)
+    .gt("date", reflectDate)
     .select("id");
 
   if (error) return { removed: 0, error: error.message };
@@ -298,20 +298,20 @@ export async function applyDueRecurringExpenses(
     if (months.length === 0) continue;
 
     let lastOk: string | null = row.last_applied_month;
-    const today = koreaToday();
+    const reflectDate = koreaRecurringReflectDate();
     for (const month of months) {
       const marker = `[정기#${row.id}]`;
       const date = recurringDateForMonth(row.start_date, month);
-      // 아직 오지 않은 날짜는 지출로 넣지 않음 (구매 내역·합계에 미리 잡히지 않게)
-      if (date > today) continue;
+      // 오전 10시 전·미래 날짜는 지출로 넣지 않음 (지출 내역·합계에 미리 잡히지 않게)
+      if (date > reflectDate) continue;
 
       const description = `${marker} ${row.description}`;
 
+      // 같은 정기 id + 같은 날짜면 금액이 달라도 중복 삽입하지 않음
       const { data: existing } = await supabase
         .from("expenses")
         .select("id")
         .eq("date", date)
-        .eq("amount", row.amount)
         .ilike("description", `${marker}%`)
         .maybeSingle();
 

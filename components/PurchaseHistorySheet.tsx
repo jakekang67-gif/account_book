@@ -25,7 +25,7 @@ type PurchaseHistorySheetProps = {
   editingId?: number | null;
 };
 
-/** 구매 내역 전체·검색 */
+/** 지출 내역 전체·검색 */
 export function PurchaseHistorySheet({
   open,
   items,
@@ -143,7 +143,7 @@ export function PurchaseHistorySheet({
             id="purchase-history-title"
             className="text-[16px] font-semibold text-[#1d1d1f]"
           >
-            구매 내역 확인
+            지출 내역
           </h2>
           <button
             type="button"

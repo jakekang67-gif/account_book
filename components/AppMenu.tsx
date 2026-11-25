@@ -9,7 +9,6 @@ import {
 type AppMenuProps = {
   expenses: ExcelExpenseRow[];
   onOpenCategoryEditor?: () => void;
-  onOpenMonthSummary?: () => void;
   onOpenRecurring?: () => void;
   onOpenRecurringIncome?: () => void;
   onOpenInstallHelp?: () => void;
@@ -25,7 +24,6 @@ type AppMenuProps = {
 export function AppMenu({
   expenses,
   onOpenCategoryEditor,
-  onOpenMonthSummary,
   onOpenRecurring,
   onOpenRecurringIncome,
   onOpenInstallHelp,
@@ -95,18 +93,6 @@ export function AppMenu({
                 className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
               >
                 엑셀 다운로드
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onOpenMonthSummary?.();
-                }}
-                className="w-full px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
-              >
-                이번 달 수입·지출
               </button>
             </li>
             <li>

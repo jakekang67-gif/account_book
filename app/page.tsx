@@ -48,7 +48,11 @@ import {
   isChatCleanupSelectChoice,
 } from "@/lib/chatIntent";
 import { normalizeExpenseDescription } from "@/lib/expenseDescription";
-import { koreaToday } from "@/lib/date";
+import {
+  isRecurringExpenseDescription,
+  koreaRecurringReflectDate,
+  koreaToday,
+} from "@/lib/date";
 import {
   AutofillDecoys,
   NoAutofillInput,
@@ -404,11 +408,12 @@ export default function Home() {
   const [saveToDateBusy, setSaveToDateBusy] = useState(false);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
-  const [monthSummaryOpen, setMonthSummaryOpen] = useState(false);
-  /** 월별 탭: 지출/수입 (탭 진입 시 항상 지출) */
-  const [monthlyKind, setMonthlyKind] = useState<"expense" | "income">(
-    "expense",
-  );
+  /** 월별 탭: 지출/수입/결과 (탭 진입 시 항상 지출) */
+  const [monthlyKind, setMonthlyKind] = useState<
+    "expense" | "income" | "result"
+  >("expense");
+  /** 정기 항목 반영 기준일 (오전 10시) — 1분마다 갱신 */
+  const [recurringReflectDate, setRecurringReflectDate] = useState("");
   const [recurringOpen, setRecurringOpen] = useState(false);
   const [recurringIncomeOpen, setRecurringIncomeOpen] = useState(false);
   const [recurringRows, setRecurringRows] = useState<RecurringExpense[]>([]);
@@ -450,11 +455,21 @@ export default function Home() {
   const [currentMonth, setCurrentMonth] = useState("");
   const [todayMax, setTodayMax] = useState("");
 
-  // 아직 오지 않은 날짜(미리 들어간 정기 지출 등)는 모든 합계·차트에서 제외
+  // 미래 날짜·(정기만) 오전 10시 미도래 건은 합계·차트·지출 내역에서 제외
   const occurredExpenses = useMemo(() => {
-    if (!todayMax) return expenses;
-    return expenses.filter((item) => item.date <= todayMax);
-  }, [expenses, todayMax]);
+    return expenses.filter((item) => {
+      if (todayMax && item.date > todayMax) return false;
+      // recurringReflectDate는 useEffect에서만 채워 프리렌더의 Date()를 피함
+      if (
+        recurringReflectDate &&
+        isRecurringExpenseDescription(item.description) &&
+        item.date > recurringReflectDate
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [expenses, todayMax, recurringReflectDate]);
 
   const monthlyTotals = useMemo(
     () => summarizeByMonth(occurredExpenses),
@@ -466,10 +481,11 @@ export default function Home() {
     [occurredExpenses],
   );
 
-  const monthlyTabRows = useMemo(
-    () => (monthlyKind === "income" ? monthlyIncomeTotals : monthlyTotals),
-    [monthlyKind, monthlyIncomeTotals, monthlyTotals],
-  );
+  const monthlyTabRows = useMemo(() => {
+    if (monthlyKind === "income") return monthlyIncomeTotals;
+    if (monthlyKind === "expense") return monthlyTotals;
+    return [];
+  }, [monthlyKind, monthlyIncomeTotals, monthlyTotals]);
 
   const availableMonths = useMemo(
     () => listMonths(occurredExpenses),
@@ -545,7 +561,45 @@ export default function Home() {
     const today = koreaToday();
     setTodayMax(today);
     setCurrentMonth(today.slice(0, 7));
+    setRecurringReflectDate(koreaRecurringReflectDate());
   }, []);
+
+  // 오전 10시 경계 지나면 정기 반영 기준일·목록을 다시 맞춤
+  useEffect(() => {
+    const tick = () => {
+      const next = koreaRecurringReflectDate();
+      setRecurringReflectDate((prev) => (prev === next ? prev : next));
+      setTodayMax(koreaToday());
+    };
+    const id = window.setInterval(tick, 60_000);
+    function onVisible() {
+      if (document.visibilityState === "visible") tick();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  // 반영 기준일이 바뀌면(예: 10시 도래) 정기 항목을 expenses에 넣고 목록 갱신
+  useEffect(() => {
+    if (!user?.id || !recurringReflectDate) return;
+    let cancelled = false;
+    void (async () => {
+      const applied = await applyDueRecurringExpenses();
+      if (cancelled) return;
+      if (applied.error) setRecurringError(applied.error);
+      if (applied.applied > 0 || applied.removedFuture > 0) {
+        await loadExpenses();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // loadExpenses는 안정적이지 않을 수 있어 reflect·user만 의존
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, recurringReflectDate]);
 
   useEffect(() => {
     setExpandedCategory(null);
@@ -2137,7 +2191,9 @@ export default function Home() {
         : tab === "monthly"
           ? monthlyKind === "income"
             ? "월별 수입"
-            : "월별 지출"
+            : monthlyKind === "result"
+              ? "월별 결과"
+              : "월별 지출"
           : tab === "average"
             ? "월 평균 지출"
             : "카테고리별 지출";
@@ -2212,7 +2268,6 @@ export default function Home() {
             <AppMenu
               expenses={occurredExpenses}
               onOpenCategoryEditor={() => setCategoryEditorOpen(true)}
-              onOpenMonthSummary={() => setMonthSummaryOpen(true)}
               onOpenRecurring={() => void openRecurringSheet()}
               onOpenRecurringIncome={() => void openRecurringIncomeSheet()}
               onOpenInstallHelp={() => setInstallHelpOpen(true)}
@@ -2243,7 +2298,7 @@ export default function Home() {
 
         {tab === "chat" && (
           <>
-        {/* 지출 합계 + 구매 내역 확인 (목록은 시트에서) */}
+        {/* 지출 합계 + 지출 내역 (목록은 시트에서) */}
         <section className="shrink-0 border-b border-[#9ec0e8] bg-[#d4e8ff] px-3 py-2">
           <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
             <div className="flex min-w-0 items-baseline gap-2">
@@ -2262,7 +2317,7 @@ export default function Home() {
               onClick={() => setPurchaseSheetOpen(true)}
               className="shrink-0 rounded-full bg-white px-3 py-1 text-[12px] font-medium text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
             >
-              구매 내역 확인
+              지출 내역
             </button>
           </div>
           {expenseError && (
@@ -2620,6 +2675,7 @@ export default function Home() {
               categoryTree={categoryTree}
               todayMax={todayMax}
               busy={manualSaveBusy}
+              hideNativeDate={appMenuOpen}
               onSave={saveManualExpense}
             />
           </div>
@@ -2650,8 +2706,34 @@ export default function Home() {
               >
                 수입
               </button>
+              <button
+                type="button"
+                onClick={() => setMonthlyKind("result")}
+                className={`flex-1 rounded-lg py-2 text-[13px] font-medium transition ${
+                  monthlyKind === "result"
+                    ? "bg-white text-[#1d1d1f] shadow-sm"
+                    : "text-[#86868b]"
+                }`}
+              >
+                결과
+              </button>
             </div>
-            {loadingExpenses ? (
+            {monthlyKind === "result" ? (
+              loadingExpenses ? (
+                <p className="rounded-2xl bg-white px-4 py-8 text-center text-[14px] text-[#86868b]">
+                  불러오는 중...
+                </p>
+              ) : (
+                <MonthIncomeExpenseSheet
+                  variant="inline"
+                  month={currentMonth}
+                  income={thisMonthIncome}
+                  expense={thisMonthSpent}
+                  totalIncome={totalIncomeAll}
+                  totalExpense={totalExpenseAll}
+                />
+              )
+            ) : loadingExpenses ? (
               <p className="rounded-2xl bg-white px-4 py-8 text-center text-[14px] text-[#86868b]">
                 불러오는 중...
               </p>
@@ -3116,16 +3198,6 @@ export default function Home() {
         onClose={() => setChatCleanupOpen(false)}
         onClearAll={() => clearAllChat()}
         onStartSelect={() => startChatSelectCleanup(false)}
-      />
-
-      <MonthIncomeExpenseSheet
-        open={monthSummaryOpen}
-        month={currentMonth}
-        income={thisMonthIncome}
-        expense={thisMonthSpent}
-        totalIncome={totalIncomeAll}
-        totalExpense={totalExpenseAll}
-        onClose={() => setMonthSummaryOpen(false)}
       />
 
       <RecurringExpenseSheet
