@@ -370,6 +370,8 @@ export default function Home() {
   const { user, loading: authLoading, signOut } = useAuth();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loadingExpenses, setLoadingExpenses] = useState(true);
+  /** 첫 로드 이후에만 true — 재조회 시 로딩 깜빡임 방지 */
+  const expensesLoadedRef = useRef(false);
   const [expenseError, setExpenseError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -697,6 +699,7 @@ export default function Home() {
   useEffect(() => {
     if (!user) {
       setExpenses([]);
+      expensesLoadedRef.current = false;
       setCategoryRows([]);
       setCategoryTree(DEFAULT_CATEGORY_TREE);
       setLoadingExpenses(false);
@@ -1034,7 +1037,10 @@ export default function Home() {
   }
 
   async function loadExpenses() {
-    setLoadingExpenses(true);
+    // 이미 한 번 불러온 뒤에는 화면을 유지한 채 백그라운드만 갱신
+    if (!expensesLoadedRef.current) {
+      setLoadingExpenses(true);
+    }
     setExpenseError(null);
 
     try {
@@ -1086,6 +1092,7 @@ export default function Home() {
       setExpenseError(message);
       setExpenses([]);
     } finally {
+      expensesLoadedRef.current = true;
       setLoadingExpenses(false);
     }
   }
@@ -3084,7 +3091,7 @@ export default function Home() {
 
         {tab === "calendar" && (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {loadingExpenses || !calendarMonth ? (
+            {!calendarMonth ? (
               <p className="px-4 py-8 text-center text-[14px] text-[#86868b]">
                 불러오는 중...
               </p>
@@ -3099,7 +3106,7 @@ export default function Home() {
         )}
 
         {/* 하단 메뉴 */}
-        <nav className="shrink-0 border-t border-black/5 bg-white px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1">
+        <nav className="shrink-0 border-t border-black/5 bg-white px-1 pb-[max(0.4025rem,env(safe-area-inset-bottom))] pt-[0.2875rem]">
           <div className="grid grid-cols-6 gap-0.5">
             {(
               [
@@ -3117,7 +3124,7 @@ export default function Home() {
                   key={item.id}
                   type="button"
                   onClick={() => setTab(item.id)}
-                  className={`rounded-xl px-1 py-1.5 text-[11px] font-medium transition-colors sm:text-[12px] ${
+                  className={`rounded-xl px-1 py-[0.43125rem] text-[11px] font-medium transition-colors sm:text-[12px] ${
                     active
                       ? "bg-[#1d1d1f] text-white"
                       : "bg-transparent text-[#86868b]"

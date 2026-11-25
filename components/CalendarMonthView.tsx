@@ -5,6 +5,7 @@ import {
   formatRecurringDisplayDescription,
   isRecurringExpenseDescription,
 } from "@/lib/date";
+import { isKoreanHoliday } from "@/lib/koreanHolidays";
 import { isIncomeCategory, formatMonthLabel } from "@/lib/reports";
 
 export type CalendarExpenseItem = {
@@ -210,7 +211,7 @@ export function CalendarMonthView({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-white px-1.5 pb-1.5 pt-1.5">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-white px-1.5 pb-2 pt-1.5">
       <div className="mb-1 flex shrink-0 items-center justify-between gap-2 px-0.5">
         <button
           type="button"
@@ -252,8 +253,9 @@ export function CalendarMonthView({
         ))}
       </div>
 
+      {/* flex-1 대신 약 72%만 써서 하단 안내 문구 공간을 확보 */}
       <div
-        className="grid min-h-0 flex-1 grid-cols-7 gap-px overflow-hidden border border-black/15 bg-black/15"
+        className="grid min-h-0 w-full flex-[0_0_72%] grid-cols-7 gap-px overflow-hidden border border-black/15 bg-black/15"
         style={gridStyle}
       >
         {WEEKDAYS.map((wd, i) => (
@@ -275,8 +277,14 @@ export function CalendarMonthView({
             );
           }
           const weekday = idx % 7;
+          const holiday = isKoreanHoliday(cell.date);
+          // 일요일·공휴일 적색, 토요일 청색, 그 외 검정
           const dayColor =
-            weekday === 0 ? "#e53935" : weekday === 6 ? "#1565c0" : "#1d1d1f";
+            weekday === 0 || holiday
+              ? "#e53935"
+              : weekday === 6
+                ? "#1565c0"
+                : "#1d1d1f";
           const dayItems = byDate.get(cell.date) ?? [];
 
           return (
@@ -315,6 +323,10 @@ export function CalendarMonthView({
           );
         })}
       </div>
+
+      <p className="mt-auto shrink-0 px-1 pb-1 pt-2 text-center text-[12px] leading-snug text-[#86868b]">
+        날짜를 누르면 그날 내역을 볼 수 있어요.
+      </p>
     </div>
   );
 }
