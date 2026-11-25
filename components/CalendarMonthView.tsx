@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type TouchEvent,
+} from "react";
 import {
   formatRecurringDisplayDescription,
   isRecurringExpenseDescription,
@@ -38,6 +45,9 @@ const KIND_LABEL: Record<CalendarKind, string> = {
 };
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"] as const;
+
+/** 가로 스와이프로 달 넘김 (px). 세로 스크롤과 구분 */
+const SWIPE_MIN_DX = 56;
 
 type CalendarMonthViewProps = {
   monthKey: string;
@@ -83,10 +93,43 @@ export function CalendarMonthView({
   onMonthChange,
 }: CalendarMonthViewProps) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  /** 스와이프 직후 날짜 칸 click 오발 방지 */
+  const suppressClickRef = useRef(false);
 
   useEffect(() => {
     setSelectedDate(null);
   }, [monthKey]);
+
+  function onSwipeTouchStart(e: TouchEvent) {
+    const t = e.changedTouches[0];
+    if (!t) return;
+    touchStartRef.current = { x: t.clientX, y: t.clientY };
+  }
+
+  function onSwipeTouchEnd(e: TouchEvent) {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) return;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) < SWIPE_MIN_DX) return;
+    // 세로 움직임이 더 크면 스크롤로 보고 무시
+    if (Math.abs(dy) > Math.abs(dx) * 0.65) return;
+    suppressClickRef.current = true;
+    // 왼쪽으로 밀기(dx<0) → 다음 달, 오른쪽으로 밀기 → 이전 달
+    onMonthChange(addMonthKey(monthKey, dx < 0 ? 1 : -1));
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 350);
+  }
+
+  function onDayClick(date: string) {
+    if (suppressClickRef.current) return;
+    setSelectedDate(date);
+  }
 
   const byDate = useMemo(() => {
     const map = new Map<string, CalendarExpenseItem[]>();
@@ -211,7 +254,11 @@ export function CalendarMonthView({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-white px-1.5 pb-2 pt-1.5">
+    <div
+      className="flex h-full min-h-0 flex-1 flex-col bg-white px-1.5 pb-2 pt-1.5"
+      onTouchStart={onSwipeTouchStart}
+      onTouchEnd={onSwipeTouchEnd}
+    >
       <div className="mb-1 flex shrink-0 items-center justify-between gap-2 px-0.5">
         <button
           type="button"
@@ -291,7 +338,7 @@ export function CalendarMonthView({
             <button
               key={cell.date}
               type="button"
-              onClick={() => setSelectedDate(cell.date)}
+              onClick={() => onDayClick(cell.date)}
               className="flex min-h-0 flex-col overflow-hidden bg-white p-px text-left hover:bg-[#f8f8f8]"
             >
               <p
