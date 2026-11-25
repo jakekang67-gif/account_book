@@ -192,19 +192,29 @@ export function matchCategoryFromText(
 
 /**
  * 분류 탭과 동일한 집계로 통계 답변 생성.
- * 소분류를 물어도 해당 대분류 총액 + 지출된 소분류 전체를 보여 줍니다.
- * 형식:
- * 대분류 : 총금액
- *  - 소분류 : 금액
+ * - 대분류만: 대분류 총액 + 소분류 목록
+ * - 소분류까지: 해당 소분류 금액만
  */
 export function formatStatsBreakdownReply(
   expenses: ExpenseLike[],
   monthKey: string,
   filterCategory?: string | null,
-  /** 호환용. 소분류 질문도 대분류 전체 소분류를 보여 주므로 표시에는 쓰지 않습니다. */
-  _filterSubcategory?: string | null,
+  filterSubcategory?: string | null,
 ) {
   const monthLabel = formatMonthLabel(monthKey);
+
+  // 소분류 질문 → 해당 소분류만
+  if (filterCategory && filterSubcategory) {
+    const hit = summarizeBySubcategory(
+      expenses,
+      monthKey,
+      filterCategory,
+    ).find((row) => row.subcategory === filterSubcategory);
+    if (!hit) {
+      return `${monthLabel} 「${filterCategory}_${filterSubcategory}」 기록이 아직 없어요.`;
+    }
+    return `${monthLabel}\n${filterCategory}_${filterSubcategory} : ${formatWon(hit.total)}`;
+  }
 
   const categories = filterCategory
     ? summarizeByCategory(expenses, monthKey).filter(

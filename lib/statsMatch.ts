@@ -34,9 +34,10 @@ function norm(s: string) {
 export function statsQueryCore(text: string) {
   return norm(text)
     .replace(
-      /(총\s*)?지출|얼마|얼마나|합계|알려줘|알려\s*줘|보여줘|보여\s*줘|이번\s*달|저번\s*달|지난\s*달|\?|？/g,
+      /(총\s*)?지출|정기|얼마|얼마나|합계|알려줘|알려\s*줘|보여줘|보여\s*줘|이번\s*달|저번\s*달|지난\s*달|\?|？/g,
       "",
     )
+    .replace(/(야|에요|예요|인가요|인가|지)$/g, "")
     .trim();
 }
 
@@ -113,17 +114,23 @@ export function findStatsCandidates(
   return [...found.values()];
 }
 
+export type ResolvedStatsCategory =
+  | {
+      kind: "category";
+      category: string;
+      /** 소분류 질문이면 채움. 대분류만 물으면 null */
+      subcategory: string | null;
+    }
+  | { kind: "ambiguous"; candidates: StatsCandidate[] }
+  | { kind: "none" };
+
 /**
- * 소분류 질문이면 해당 대분류로, 대분류 질문이면 그 대분류로 바로 해석합니다.
- * 예: "가족식대 지출?" → 가족 (식대·가족_가족식대로 갈라지지 않음)
+ * 대분류만 물으면 대분류, 소분류(예: 가족식대)를 물으면 대·소분류를 함께 반환합니다.
  */
 export function resolveStatsCategory(
   text: string,
   tree: CategoryTree,
-):
-  | { kind: "category"; category: string }
-  | { kind: "ambiguous"; candidates: StatsCandidate[] }
-  | { kind: "none" } {
+): ResolvedStatsCategory {
   const queryCore = statsQueryCore(text);
   if (!queryCore || queryCore.length < 2) return { kind: "none" };
 
@@ -131,20 +138,20 @@ export function resolveStatsCategory(
   //    예: "식대?" → 식대 (가족식대/기타식대로 갈리지 않음)
   for (const [alias, category] of Object.entries(CATEGORY_ALIASES)) {
     if (queryCore === norm(alias) && category in tree) {
-      return { kind: "category", category };
+      return { kind: "category", category, subcategory: null };
     }
   }
   for (const category of Object.keys(tree)) {
     if (category === "수입") continue;
     if (queryCore === norm(category)) {
-      return { kind: "category", category };
+      return { kind: "category", category, subcategory: null };
     }
   }
 
   type SubHit = { category: string; subcategory: string; score: number };
 
   // 2) 강한 소분류: 정확히 같거나 질문에 소분류 전체 포함
-  //    예: "가족식대 지출?" / "AI구독?"
+  //    예: "가족식대 지출?" / "가족 식대?" / "AI구독?"
   const strongSubs: SubHit[] = [];
   for (const [category, subs] of Object.entries(tree)) {
     if (category === "수입") continue;
@@ -154,7 +161,15 @@ export function resolveStatsCategory(
       let score = 0;
       if (queryCore === s) score = 100;
       else if (queryCore.includes(s)) score = 80 + s.length;
-      else continue;
+      // 대분류+소분류 조각: "가족"+"식대" → "가족식대"
+      else if (
+        queryCore.includes(norm(category)) &&
+        s.includes(norm(category)) === false &&
+        queryCore.replace(norm(category), "").length >= 2 &&
+        s.includes(queryCore.replace(norm(category), ""))
+      ) {
+        score = 70 + s.length;
+      } else continue;
       strongSubs.push({ category, subcategory: sub, score });
     }
   }
@@ -164,7 +179,11 @@ export function resolveStatsCategory(
     const top = strongSubs.filter((h) => h.score === best.score);
     const categories = [...new Set(top.map((h) => h.category))];
     if (categories.length === 1) {
-      return { kind: "category", category: categories[0] };
+      return {
+        kind: "category",
+        category: categories[0],
+        subcategory: best.subcategory,
+      };
     }
     return {
       kind: "ambiguous",
@@ -191,7 +210,11 @@ export function resolveStatsCategory(
     }
   }
   if (catHits.size === 1) {
-    return { kind: "category", category: [...catHits][0] };
+    return {
+      kind: "category",
+      category: [...catHits][0],
+      subcategory: null,
+    };
   }
   if (catHits.size > 1) {
     return {
@@ -219,9 +242,15 @@ export function resolveStatsCategory(
     }
   }
   if (weakSubs.length > 0) {
+    weakSubs.sort((a, b) => b.score - a.score);
+    const best = weakSubs[0];
     const categories = [...new Set(weakSubs.map((h) => h.category))];
     if (categories.length === 1) {
-      return { kind: "category", category: categories[0] };
+      return {
+        kind: "category",
+        category: categories[0],
+        subcategory: best.subcategory,
+      };
     }
     return {
       kind: "ambiguous",

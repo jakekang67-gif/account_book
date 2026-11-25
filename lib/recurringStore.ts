@@ -757,24 +757,38 @@ type TaggedExpenseLike = {
   date: string;
   amount: number;
   category: string | null;
+  subcategory?: string | null;
   description: string;
 };
 
 /**
  * 실제 지출 내역 중 `[정기…]` 태그가 붙은 건만 합산 (채팅「정기 지출 얼마」용).
  * 항목명 나열 없이 대분류 합계만 반환.
+ * categoryFilter / subcategoryFilter 가 있으면 해당 분류만 합산.
  */
 export function summarizeTaggedRecurringExpenses(
   expenses: TaggedExpenseLike[],
   monthKey: string,
   kind: RecurringSummaryKind = "expense",
+  categoryFilter?: string | null,
+  subcategoryFilter?: string | null,
 ) {
+  const filterNorm = categoryFilter?.trim() || null;
+  const subFilterNorm = subcategoryFilter?.trim() || null;
   const matched = expenses.filter((item) => {
     if (monthKeyFromDate(item.date) !== monthKey) return false;
     if (!isRecurringExpenseDescription(item.description)) return false;
     const isIncome = isIncomeCategory(item.category);
     if (kind === "expense" && isIncome) return false;
     if (kind === "income" && !isIncome) return false;
+    if (filterNorm) {
+      const cat = item.category?.trim() || "기타";
+      if (cat !== filterNorm) return false;
+    }
+    if (subFilterNorm) {
+      const sub = item.subcategory?.trim() || "기타";
+      if (sub !== subFilterNorm) return false;
+    }
     return true;
   });
 

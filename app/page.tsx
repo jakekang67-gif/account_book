@@ -2047,7 +2047,7 @@ export default function Home() {
 
         const { data: freshRows, error: freshError } = await supabase
           .from("expenses")
-          .select("date, amount, category, description")
+          .select("date, amount, category, subcategory, description")
           .gte("date", `${monthKey}-01`)
           .lte("date", `${monthKey}-31`);
         if (freshError) {
@@ -2064,6 +2064,7 @@ export default function Home() {
             date: string;
             amount: number;
             category: string | null;
+            subcategory: string | null;
             description: string;
           }[]) ?? []
         ).filter((item) => {
@@ -2077,21 +2078,65 @@ export default function Home() {
           return true;
         });
 
+        const resolved = resolveStatsCategory(text, categoryTree);
+        const categoryFilter =
+          resolved.kind === "category" ? resolved.category : null;
+        const subcategoryFilter =
+          resolved.kind === "category" ? resolved.subcategory : null;
+        // 모호하면 후보 대분류만 남기고, 없으면 전체
+        const allowedCategories =
+          resolved.kind === "ambiguous"
+            ? new Set(
+                resolved.candidates.map((c) => c.category).filter(Boolean),
+              )
+            : null;
+
         const summary = summarizeTaggedRecurringExpenses(
           visible,
           monthKey,
           "expense",
+          categoryFilter,
+          subcategoryFilter,
         );
-        if (summary.count === 0) {
+        const categories = allowedCategories
+          ? summary.categories.filter((c) => allowedCategories.has(c.category))
+          : summary.categories;
+        const total = allowedCategories
+          ? categories.reduce((sum, c) => sum + c.amount, 0)
+          : summary.total;
+        const count = categoryFilter
+          ? summary.count
+          : allowedCategories
+            ? categories.length
+            : summary.count;
+
+        const filterLabel = subcategoryFilter
+          ? `${categoryFilter}_${subcategoryFilter}`
+          : categoryFilter;
+
+        if (count === 0 || (categoryFilter && total === 0)) {
           pushAssistant(
-            `${formatMonthLabel(monthKey)}에 해당하는 정기 지출이 없어요.`,
+            filterLabel
+              ? `${formatMonthLabel(monthKey)} 「${filterLabel}」 정기 지출이 없어요.`
+              : `${formatMonthLabel(monthKey)}에 해당하는 정기 지출이 없어요.`,
           );
           return;
         }
+
+        if (categoryFilter) {
+          pushAssistant(
+            [
+              `${formatMonthLabel(monthKey)} ${filterLabel} 정기 지출`,
+              `합계 : ${formatAmount(total)}원`,
+            ].join("\n"),
+          );
+          return;
+        }
+
         const lines = [
           `${formatMonthLabel(monthKey)} 정기 지출`,
-          `합계 : ${formatAmount(summary.total)}원`,
-          ...summary.categories.map(
+          `합계 : ${formatAmount(total)}원`,
+          ...categories.map(
             (c) => `${c.category} : ${formatAmount(c.amount)}원`,
           ),
         ];
@@ -2108,10 +2153,15 @@ export default function Home() {
         const rows = expenses.filter((item) => item.date <= today);
         const resolved = resolveStatsCategory(text, categoryTree);
 
-        // 소분류·대분류가 해석되면 확인 없이 대분류 전체 소분류를 바로 답변
+        // 대·소분류가 해석되면 확인 없이 바로 답변 (소분류면 소분류만)
         if (resolved.kind === "category") {
           pushAssistant(
-            formatStatsBreakdownReply(rows, monthKey, resolved.category),
+            formatStatsBreakdownReply(
+              rows,
+              monthKey,
+              resolved.category,
+              resolved.subcategory,
+            ),
           );
           return;
         }
