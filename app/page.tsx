@@ -582,7 +582,7 @@ export default function Home() {
     };
   }, []);
 
-  // 반영 기준일이 바뀌면(예: 10시 도래) 정기 항목을 expenses에 넣고 목록 갱신
+  // 반영 기준일이 바뀌면(예: 10시 도래) 정기 정리·누락 복구 후 목록 갱신
   useEffect(() => {
     if (!user?.id || !recurringReflectDate) return;
     let cancelled = false;
@@ -590,9 +590,8 @@ export default function Home() {
       const applied = await applyDueRecurringExpenses();
       if (cancelled) return;
       if (applied.error) setRecurringError(applied.error);
-      if (applied.applied > 0 || applied.removedFuture > 0) {
-        await loadExpenses();
-      }
+      // 미도래 삭제·누락 삽입 모두 반영되도록 항상 다시 로드
+      await loadExpenses();
     })();
     return () => {
       cancelled = true;
