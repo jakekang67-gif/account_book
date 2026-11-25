@@ -73,7 +73,7 @@ import {
   saveRecurringExpense,
   saveRecurringThisAndFuture,
   saveRecurringThisMonthOnly,
-  summarizeRecurringForMonth,
+  summarizeTaggedRecurringExpenses,
   type RecurringExpense,
 } from "@/lib/recurringStore";
 import {
@@ -1985,22 +1985,50 @@ export default function Home() {
       }
 
       if (intent === "recurring_stats") {
-        const { rows, error } = await loadRecurringExpenses();
-        if (error) {
+        const monthKey = currentMonth || koreaToday().slice(0, 7);
+        // 미태깅 정기 건에 [정기#id]를 붙인 뒤, 태깅된 지출만 합산
+        const applied = await applyDueRecurringExpenses(monthKey);
+        if (applied.error) setRecurringError(applied.error);
+        await loadExpenses();
+
+        const { data: freshRows, error: freshError } = await supabase
+          .from("expenses")
+          .select("date, amount, category, description")
+          .gte("date", `${monthKey}-01`)
+          .lte("date", `${monthKey}-31`);
+        if (freshError) {
           pushAssistant(
-            `정기 지출을 불러오지 못했어요. (${error})\nSupabase에서 create_recurring_expenses.sql 실행 여부를 확인해 주세요.`,
+            `정기 지출을 불러오지 못했어요. (${freshError.message})`,
           );
           return;
         }
-        const monthKey = currentMonth || koreaToday().slice(0, 7);
-        // 지출만 (고정 수입·수입 제외). 항목명 나열 없이 대분류 합계만.
-        const summary = summarizeRecurringForMonth(
-          rows,
+
+        const today = todayMax || koreaToday();
+        const reflect = recurringReflectDate || today;
+        const visible = (
+          (freshRows as {
+            date: string;
+            amount: number;
+            category: string | null;
+            description: string;
+          }[]) ?? []
+        ).filter((item) => {
+          if (item.date > today) return false;
+          if (
+            isRecurringExpenseDescription(item.description) &&
+            item.date > reflect
+          ) {
+            return false;
+          }
+          return true;
+        });
+
+        const summary = summarizeTaggedRecurringExpenses(
+          visible,
           monthKey,
-          undefined,
           "expense",
         );
-        if (summary.due.length === 0) {
+        if (summary.count === 0) {
           pushAssistant(
             `${formatMonthLabel(monthKey)}에 해당하는 정기 지출이 없어요.`,
           );

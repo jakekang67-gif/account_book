@@ -55,9 +55,9 @@ export function koreaRecurringReflectDate(hour = koreaHour()) {
   return koreaToday();
 }
 
-/** description이 정기 자동반영 건인지 ([정기#id] 접두) */
+/** description이 정기 반영 건인지 (`[정기#id]` 또는 `[정기]`) */
 export function isRecurringExpenseDescription(description: string) {
-  return /^\[정기#\d+\]/.test(description.trim());
+  return /^\[정기(#\d+)?\]/.test(description.trim());
 }
 
 /**
@@ -65,5 +65,8 @@ export function isRecurringExpenseDescription(description: string) {
  * (DB에는 #id를 유지해 중복 방지)
  */
 export function formatRecurringDisplayDescription(description: string) {
-  return description.replace(/^\[정기#\d+\]\s*/u, "[정기] ").trim();
+  return description
+    .replace(/^\[정기#\d+\]\s*/u, "[정기] ")
+    .replace(/^\[정기\]\s*/u, "[정기] ")
+    .trim();
 }

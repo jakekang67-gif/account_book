@@ -1,4 +1,8 @@
-import { koreaRecurringReflectDate, koreaToday } from "@/lib/date";
+import {
+  isRecurringExpenseDescription,
+  koreaRecurringReflectDate,
+  koreaToday,
+} from "@/lib/date";
 import { normalizeExpenseDescription } from "@/lib/expenseDescription";
 import { isIncomeCategory, monthKeyFromDate } from "@/lib/reports";
 import { supabase } from "@/lib/supabase";
@@ -421,29 +425,72 @@ async function dedupeRecurringMarkerInMonth(
 }
 
 /**
- * 정기 건과 같은 날·같은 금액·비슷한 내용의 수동 지출은 삭제 (정기 건 유지).
+ * 같은 달·같은 금액·비슷한 내용의 미태깅(수동) 지출을 찾음.
+ * 예정일과 같은 날짜를 우선.
  */
-async function removeSimilarManualDuplicates(input: {
-  marker: string;
+async function findSimilarManualInMonth(input: {
+  month: string;
   date: string;
   amount: number;
   baseDescription: string;
+}): Promise<{
+  id: number;
+  date: string;
+  description: string;
+} | null> {
+  const { data, error } = await supabase
+    .from("expenses")
+    .select("id, date, description, amount")
+    .eq("amount", input.amount)
+    .gte("date", `${input.month}-01`)
+    .lte("date", `${input.month}-31`)
+    .order("id", { ascending: true });
+
+  if (error || !data?.length) return null;
+
+  const manuals = data.filter((row) => {
+    const desc = String(row.description ?? "");
+    if (isRecurringExpenseDescription(desc)) return false;
+    return recurringDescriptionsSimilar(desc, input.baseDescription);
+  });
+  if (manuals.length === 0) return null;
+
+  const onDate = manuals.find((row) => row.date === input.date);
+  const pick = onDate ?? manuals[0];
+  return {
+    id: pick.id as number,
+    date: String(pick.date),
+    description: String(pick.description ?? ""),
+  };
+}
+
+/**
+ * 정기 marker 행과 같은 달·금액·유사 내용의 수동 지출은 삭제 (정기 건 유지).
+ */
+async function removeSimilarManualDuplicates(input: {
+  marker: string;
+  month: string;
+  amount: number;
+  baseDescription: string;
+  keepId: number;
 }): Promise<{ removed: number; error: string | null }> {
   const { data: candidates, error } = await supabase
     .from("expenses")
     .select("id, description, amount")
-    .eq("date", input.date)
-    .eq("amount", input.amount);
+    .eq("amount", input.amount)
+    .gte("date", `${input.month}-01`)
+    .lte("date", `${input.month}-31`);
 
   if (error) return { removed: 0, error: error.message };
 
   const toDelete: number[] = [];
   for (const row of candidates ?? []) {
+    const id = row.id as number;
+    if (id === input.keepId) continue;
     const desc = String(row.description ?? "");
-    // 정기 marker 행은 유지
     if (desc.includes(input.marker)) continue;
     if (recurringDescriptionsSimilar(desc, input.baseDescription)) {
-      toDelete.push(row.id as number);
+      toDelete.push(id);
     }
   }
 
@@ -505,39 +552,78 @@ async function applyDueRecurringExpensesInner(
       }
       removedExtra += deduped.removed;
 
-      if (deduped.keptId == null) {
-        const { error: insertError } = await supabase.from("expenses").insert({
+      let keepId = deduped.keptId;
+
+      if (keepId == null) {
+        // 이미 같은 달·금액·유사 내용으로 수동 저장된 건이면 [정기#id]만 붙여 재사용
+        const similar = await findSimilarManualInMonth({
+          month,
           date,
           amount: row.amount,
-          description,
-          category: row.category,
-          subcategory: row.subcategory,
+          baseDescription: row.description,
         });
-        if (insertError) {
+
+        if (similar) {
+          const { error: tagError } = await supabase
+            .from("expenses")
+            .update({
+              description,
+              category: row.category,
+              subcategory: row.subcategory,
+              // 실제 지출일은 유지 (예정일과 달라도 그달 정기 건으로 태깅)
+            })
+            .eq("id", similar.id);
+          if (tagError) {
+            return {
+              applied,
+              removedFuture: removedExtra,
+              error: tagError.message,
+            };
+          }
+          keepId = similar.id;
+          applied += 1;
+        } else {
+          const { data: inserted, error: insertError } = await supabase
+            .from("expenses")
+            .insert({
+              date,
+              amount: row.amount,
+              description,
+              category: row.category,
+              subcategory: row.subcategory,
+            })
+            .select("id")
+            .single();
+          if (insertError) {
+            return {
+              applied,
+              removedFuture: removedExtra,
+              error: insertError.message,
+            };
+          }
+          keepId = inserted?.id as number;
+          applied += 1;
+        }
+      }
+
+      // 남은 유사 수동 건은 삭제 (태깅된 정기 1건만 유지)
+      if (keepId != null) {
+        const manual = await removeSimilarManualDuplicates({
+          marker,
+          month,
+          amount: row.amount,
+          baseDescription: row.description,
+          keepId,
+        });
+        if (manual.error) {
           return {
             applied,
             removedFuture: removedExtra,
-            error: insertError.message,
+            error: manual.error,
           };
         }
-        applied += 1;
+        removedExtra += manual.removed;
       }
-
-      // 같은 날·금액·유사 내용의 수동 입력은 생략(삭제), 정기 건만 유지
-      const manual = await removeSimilarManualDuplicates({
-        marker,
-        date,
-        amount: row.amount,
-        baseDescription: row.description,
-      });
-      if (manual.error) {
-        return {
-          applied,
-          removedFuture: removedExtra,
-          error: manual.error,
-        };
-      }
-      removedExtra += manual.removed;
 
       lastOk = month;
     }
@@ -581,10 +667,51 @@ export async function applyDueRecurringExpenses(
 
 export type RecurringSummaryKind = "all" | "expense" | "income";
 
+type TaggedExpenseLike = {
+  date: string;
+  amount: number;
+  category: string | null;
+  description: string;
+};
+
 /**
- * 해당 월 정기 집계 (채팅용).
+ * 실제 지출 내역 중 `[정기…]` 태그가 붙은 건만 합산 (채팅「정기 지출 얼마」용).
+ * 항목명 나열 없이 대분류 합계만 반환.
+ */
+export function summarizeTaggedRecurringExpenses(
+  expenses: TaggedExpenseLike[],
+  monthKey: string,
+  kind: RecurringSummaryKind = "expense",
+) {
+  const matched = expenses.filter((item) => {
+    if (monthKeyFromDate(item.date) !== monthKey) return false;
+    if (!isRecurringExpenseDescription(item.description)) return false;
+    const isIncome = isIncomeCategory(item.category);
+    if (kind === "expense" && isIncome) return false;
+    if (kind === "income" && !isIncome) return false;
+    return true;
+  });
+
+  const byCategory = new Map<string, number>();
+  let total = 0;
+  for (const item of matched) {
+    total += item.amount;
+    const cat = item.category?.trim() || "기타";
+    byCategory.set(cat, (byCategory.get(cat) ?? 0) + item.amount);
+  }
+
+  return {
+    total,
+    count: matched.length,
+    categories: [...byCategory.entries()]
+      .map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount),
+  };
+}
+
+/**
+ * 해당 월 정기 템플릿 집계 (알림 등).
  * 예정일이 아직 도래하지 않은 항목은 제외 (오전 10시 기준).
- * kind=expense: 수입·고정 수입 제외 / income: 수입만 / all: 전체
  */
 export function summarizeRecurringForMonth(
   rows: RecurringExpense[],
