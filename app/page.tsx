@@ -22,6 +22,7 @@ import {
   RecurringExpenseSheet,
 } from "@/components/RecurringExpenseSheet";
 import { SaveExpenseToDateDialog } from "@/components/SaveExpenseToDateDialog";
+import { CalendarMonthView } from "@/components/CalendarMonthView";
 import { CategoryPieChart } from "@/components/CategoryPieChart";
 import { LoginForm } from "@/components/LoginForm";
 import { MonthlyBarChart } from "@/components/MonthlyBarChart";
@@ -107,7 +108,13 @@ import {
 } from "@/lib/uiPrefs";
 import { supabase } from "@/lib/supabase";
 
-type AppTab = "chat" | "input" | "monthly" | "category" | "average";
+type AppTab =
+  | "chat"
+  | "input"
+  | "monthly"
+  | "category"
+  | "average"
+  | "calendar";
 
 /** expenses 테이블 한 행 */
 type Expense = {
@@ -459,6 +466,8 @@ export default function Home() {
   // 빌드 사전 렌더에서 new Date()를 쓰지 않도록, 마운트 후에만 오늘/이번 달 설정
   const [currentMonth, setCurrentMonth] = useState("");
   const [todayMax, setTodayMax] = useState("");
+  /** 달력 탭에서 보는 월 */
+  const [calendarMonth, setCalendarMonth] = useState("");
 
   // 미래 날짜·(정기만) 오전 10시 미도래 건은 합계·차트·지출 내역에서 제외
   const occurredExpenses = useMemo(() => {
@@ -564,10 +573,19 @@ export default function Home() {
 
   useEffect(() => {
     const today = koreaToday();
+    const month = today.slice(0, 7);
     setTodayMax(today);
-    setCurrentMonth(today.slice(0, 7));
+    setCurrentMonth(month);
+    setCalendarMonth(month);
     setRecurringReflectDate(koreaRecurringReflectDate());
   }, []);
+
+  // 달력 탭 진입 시 조회 월이 비어 있으면 이번 달로
+  useEffect(() => {
+    if (tab === "calendar" && !calendarMonth && currentMonth) {
+      setCalendarMonth(currentMonth);
+    }
+  }, [tab, calendarMonth, currentMonth]);
 
   // 오전 10시 경계 지나면 정기 반영 기준일·목록을 다시 맞춤
   useEffect(() => {
@@ -2258,7 +2276,9 @@ export default function Home() {
               : "월별 지출"
           : tab === "average"
             ? "월 평균 지출"
-            : "카테고리별 지출";
+            : tab === "calendar"
+              ? "달력"
+              : "카테고리별 지출";
 
   async function saveManualExpense(payload: {
     date: string;
@@ -3062,9 +3082,25 @@ export default function Home() {
           </div>
         )}
 
+        {tab === "calendar" && (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {loadingExpenses || !calendarMonth ? (
+              <p className="px-4 py-8 text-center text-[14px] text-[#86868b]">
+                불러오는 중...
+              </p>
+            ) : (
+              <CalendarMonthView
+                monthKey={calendarMonth}
+                items={occurredExpenses}
+                onMonthChange={setCalendarMonth}
+              />
+            )}
+          </div>
+        )}
+
         {/* 하단 메뉴 */}
-        <nav className="shrink-0 border-t border-black/5 bg-white px-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1">
-          <div className="grid grid-cols-5 gap-0.5">
+        <nav className="shrink-0 border-t border-black/5 bg-white px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1">
+          <div className="grid grid-cols-6 gap-0.5">
             {(
               [
                 { id: "chat", label: "채팅" },
@@ -3072,6 +3108,7 @@ export default function Home() {
                 { id: "monthly", label: "월별" },
                 { id: "category", label: "분류" },
                 { id: "average", label: "평균" },
+                { id: "calendar", label: "달력" },
               ] as const
             ).map((item) => {
               const active = tab === item.id;
@@ -3080,7 +3117,7 @@ export default function Home() {
                   key={item.id}
                   type="button"
                   onClick={() => setTab(item.id)}
-                  className={`rounded-xl px-2 py-1.5 text-[12px] font-medium transition-colors ${
+                  className={`rounded-xl px-1 py-1.5 text-[11px] font-medium transition-colors sm:text-[12px] ${
                     active
                       ? "bg-[#1d1d1f] text-white"
                       : "bg-transparent text-[#86868b]"
