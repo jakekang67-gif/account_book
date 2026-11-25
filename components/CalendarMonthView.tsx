@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   formatRecurringDisplayDescription,
   isRecurringExpenseDescription,
@@ -35,6 +29,13 @@ const KIND_COLOR: Record<CalendarKind, string> = {
   "fixed-income": "#29b6f6",
 };
 
+const KIND_LABEL: Record<CalendarKind, string> = {
+  expense: "일반 지출",
+  "fixed-expense": "고정지출",
+  income: "일반수입",
+  "fixed-income": "고정수입",
+};
+
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"] as const;
 
 type CalendarMonthViewProps = {
@@ -60,59 +61,18 @@ function classifyKind(item: CalendarExpenseItem): CalendarKind {
   return fixed ? "fixed-expense" : "expense";
 }
 
-function displayLabel(item: CalendarExpenseItem) {
+function displayName(item: CalendarExpenseItem) {
   const raw = formatRecurringDisplayDescription(item.description);
-  // 달력 칸이 좁아 "[정기] "는 색으로 구분하고 본문만 짧게
-  const name = raw.replace(/^\[정기\]\s*/u, "").trim() || raw;
-  return `${name} ${formatAmountShort(item.amount)}`;
+  return raw.replace(/^\[정기\]\s*/u, "").trim() || raw;
 }
 
-/** 칸 너비에 맞춰 글자 크기를 줄임 */
-function AutoFitText({
-  text,
-  color,
-  maxPx = 11,
-  minPx = 7,
-}: {
-  text: string;
-  color: string;
-  maxPx?: number;
-  minPx?: number;
-}) {
-  const ref = useRef<HTMLParagraphElement>(null);
-  const [fontSize, setFontSize] = useState(maxPx);
+function displayLabel(item: CalendarExpenseItem) {
+  return `${displayName(item)} ${formatAmountShort(item.amount)}`;
+}
 
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    function fit() {
-      if (!el) return;
-      let size = maxPx;
-      el.style.fontSize = `${size}px`;
-      while (size > minPx && el.scrollWidth > el.clientWidth + 1) {
-        size -= 0.5;
-        el.style.fontSize = `${size}px`;
-      }
-      setFontSize(size);
-    }
-
-    fit();
-    const ro = new ResizeObserver(() => fit());
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [text, maxPx, minPx]);
-
-  return (
-    <p
-      ref={ref}
-      className="w-full truncate leading-tight tabular-nums"
-      style={{ color, fontSize: `${fontSize}px` }}
-      title={text}
-    >
-      {text}
-    </p>
-  );
+function formatDayTitle(date: string) {
+  const [, m, d] = date.split("-");
+  return `${Number(m)}월 ${Number(d)}일`;
 }
 
 /** 한국 달력(일요일 시작) — 지출·수입을 날짜 칸에 표시 */
@@ -121,6 +81,12 @@ export function CalendarMonthView({
   items,
   onMonthChange,
 }: CalendarMonthViewProps) {
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedDate(null);
+  }, [monthKey]);
+
   const byDate = useMemo(() => {
     const map = new Map<string, CalendarExpenseItem[]>();
     for (const item of items) {
@@ -160,14 +126,97 @@ export function CalendarMonthView({
     gridTemplateRows: `auto repeat(${weekCount}, minmax(0, 1fr))`,
   } satisfies CSSProperties;
 
+  const detailItems = selectedDate ? (byDate.get(selectedDate) ?? []) : [];
+
+  if (selectedDate) {
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col bg-white px-3 pb-3 pt-2">
+        <div className="mb-2 flex shrink-0 items-center justify-between gap-2 border-b border-black/5 pb-2">
+          <h2 className="text-[16px] font-semibold text-[#1d1d1f]">
+            {formatDayTitle(selectedDate)} 내역
+          </h2>
+          <button
+            type="button"
+            onClick={() => setSelectedDate(null)}
+            className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-[#86868b] hover:bg-[#f5f5f7]"
+          >
+            닫기
+          </button>
+        </div>
+
+        <div className="mb-2 flex shrink-0 flex-wrap gap-1.5">
+          {(
+            [
+              { kind: "expense" as const, label: "일반 지출" },
+              { kind: "fixed-expense" as const, label: "고정지출" },
+              { kind: "income" as const, label: "일반수입" },
+              { kind: "fixed-income" as const, label: "고정수입" },
+            ] as const
+          ).map((item) => (
+            <span
+              key={item.kind}
+              className="px-1.5 py-0.5 text-[10px] font-medium text-white"
+              style={{ backgroundColor: KIND_COLOR[item.kind] }}
+            >
+              {item.label}
+            </span>
+          ))}
+        </div>
+
+        <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
+          {detailItems.length === 0 ? (
+            <li className="rounded-xl bg-[#f5f5f7] px-3 py-6 text-center text-[13px] text-[#86868b]">
+              이 날짜에 저장된 내역이 없습니다.
+            </li>
+          ) : (
+            detailItems.map((item) => {
+              const kind = classifyKind(item);
+              const cat = [item.category, item.subcategory]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <li
+                  key={item.id}
+                  className="flex items-start justify-between gap-3 rounded-xl bg-[#f5f5f7] px-3 py-2.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="text-[14px] font-medium"
+                      style={{ color: KIND_COLOR[kind] }}
+                    >
+                      {formatRecurringDisplayDescription(item.description)}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-[#86868b]">
+                      {KIND_LABEL[kind]}
+                      {cat ? ` · ${cat}` : ""}
+                    </p>
+                  </div>
+                  <p
+                    className="shrink-0 text-[14px] font-medium tabular-nums"
+                    style={{ color: KIND_COLOR[kind] }}
+                  >
+                    {formatAmountShort(item.amount)}
+                    <span className="ml-0.5 text-[11px] font-normal text-[#86868b]">
+                      원
+                    </span>
+                  </p>
+                </li>
+              );
+            })
+          )}
+        </ul>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-white px-2 pb-2 pt-2">
-      <div className="mb-1.5 flex shrink-0 items-center justify-between gap-2 px-1">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-white px-1.5 pb-1.5 pt-1.5">
+      <div className="mb-1 flex shrink-0 items-center justify-between gap-2 px-0.5">
         <button
           type="button"
           aria-label="이전 달"
           onClick={() => onMonthChange(addMonthKey(monthKey, -1))}
-          className="rounded-lg px-2 py-1 text-[18px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
+          className="px-2 py-1 text-[18px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
         >
           ‹
         </button>
@@ -178,13 +227,13 @@ export function CalendarMonthView({
           type="button"
           aria-label="다음 달"
           onClick={() => onMonthChange(addMonthKey(monthKey, 1))}
-          className="rounded-lg px-2 py-1 text-[18px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
+          className="px-2 py-1 text-[18px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
         >
           ›
         </button>
       </div>
 
-      <div className="mb-1.5 flex shrink-0 flex-wrap justify-center gap-1.5 px-0.5">
+      <div className="mb-1 flex shrink-0 flex-wrap justify-center gap-1 px-0.5">
         {(
           [
             { kind: "expense" as const, label: "일반 지출" },
@@ -195,7 +244,7 @@ export function CalendarMonthView({
         ).map((item) => (
           <span
             key={item.kind}
-            className="rounded px-1.5 py-0.5 text-[10px] font-medium text-white"
+            className="px-1.5 py-0.5 text-[10px] font-medium text-white"
             style={{ backgroundColor: KIND_COLOR[item.kind] }}
           >
             {item.label}
@@ -204,13 +253,13 @@ export function CalendarMonthView({
       </div>
 
       <div
-        className="grid min-h-0 flex-1 grid-cols-7 gap-px overflow-hidden rounded-xl border border-black/10 bg-black/10"
+        className="grid min-h-0 flex-1 grid-cols-7 gap-px overflow-hidden border border-black/15 bg-black/15"
         style={gridStyle}
       >
         {WEEKDAYS.map((wd, i) => (
           <div
             key={wd}
-            className="flex items-center justify-center bg-[#f5f5f7] py-1 text-[11px] font-semibold"
+            className="flex items-center justify-center bg-[#f5f5f7] py-0.5 text-[11px] font-semibold leading-none"
             style={{
               color: i === 0 ? "#e53935" : i === 6 ? "#1565c0" : "#1d1d1f",
             }}
@@ -231,29 +280,38 @@ export function CalendarMonthView({
           const dayItems = byDate.get(cell.date) ?? [];
 
           return (
-            <div
+            <button
               key={cell.date}
-              className="flex min-h-0 flex-col gap-0.5 overflow-hidden bg-white p-0.5"
+              type="button"
+              onClick={() => setSelectedDate(cell.date)}
+              className="flex min-h-0 flex-col overflow-hidden bg-white p-px text-left hover:bg-[#f8f8f8]"
             >
               <p
-                className="shrink-0 text-center text-[12px] font-bold leading-none"
-                style={{ color: dayColor }}
+                className="shrink-0 text-center font-bold leading-none"
+                style={{ color: dayColor, fontSize: "11px" }}
               >
                 {cell.day}
               </p>
-              <div className="min-h-0 flex-1 space-y-0.5 overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-hidden">
                 {dayItems.map((item) => {
                   const kind = classifyKind(item);
                   return (
-                    <AutoFitText
+                    <p
                       key={item.id}
-                      text={displayLabel(item)}
-                      color={KIND_COLOR[kind]}
-                    />
+                      className="w-full truncate tabular-nums leading-none"
+                      style={{
+                        color: KIND_COLOR[kind],
+                        fontSize: "6px",
+                        lineHeight: 1.15,
+                      }}
+                      title={displayLabel(item)}
+                    >
+                      {displayLabel(item)}
+                    </p>
                   );
                 })}
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
