@@ -39,9 +39,9 @@ const KIND_COLOR: Record<CalendarKind, string> = {
 
 const KIND_LABEL: Record<CalendarKind, string> = {
   expense: "일반 지출",
-  "fixed-expense": "고정지출",
-  income: "일반수입",
-  "fixed-income": "고정수입",
+  "fixed-expense": "고정 지출",
+  income: "일반 수입",
+  "fixed-income": "고정 수입",
 };
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"] as const;
@@ -191,18 +191,18 @@ export function CalendarMonthView({
         <div className="mb-2 flex shrink-0 flex-wrap gap-1.5">
           {(
             [
-              { kind: "expense" as const, label: "일반 지출" },
-              { kind: "fixed-expense" as const, label: "고정지출" },
-              { kind: "income" as const, label: "일반수입" },
-              { kind: "fixed-income" as const, label: "고정수입" },
+              "expense",
+              "fixed-expense",
+              "income",
+              "fixed-income",
             ] as const
-          ).map((item) => (
+          ).map((kind) => (
             <span
-              key={item.kind}
+              key={kind}
               className="px-1.5 py-0.5 text-[10px] font-medium text-white"
-              style={{ backgroundColor: KIND_COLOR[item.kind] }}
+              style={{ backgroundColor: KIND_COLOR[kind] }}
             >
-              {item.label}
+              {KIND_LABEL[kind]}
             </span>
           ))}
         </div>
@@ -284,18 +284,18 @@ export function CalendarMonthView({
       <div className="mb-1 flex shrink-0 flex-wrap justify-center gap-1 px-0.5">
         {(
           [
-            { kind: "expense" as const, label: "일반 지출" },
-            { kind: "fixed-expense" as const, label: "고정지출" },
-            { kind: "income" as const, label: "일반수입" },
-            { kind: "fixed-income" as const, label: "고정수입" },
+            "expense",
+            "fixed-expense",
+            "income",
+            "fixed-income",
           ] as const
-        ).map((item) => (
+        ).map((kind) => (
           <span
-            key={item.kind}
+            key={kind}
             className="px-1.5 py-0.5 text-[10px] font-medium text-white"
-            style={{ backgroundColor: KIND_COLOR[item.kind] }}
+            style={{ backgroundColor: KIND_COLOR[kind] }}
           >
-            {item.label}
+            {KIND_LABEL[kind]}
           </span>
         ))}
       </div>
