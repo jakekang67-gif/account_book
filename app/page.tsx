@@ -67,8 +67,10 @@ import {
   wasRecurringReminderShown,
 } from "@/lib/recurringReminders";
 import {
+  AUTO_APPLIED_RECURRING_MESSAGE,
   applyDueRecurringExpenses,
   deleteRecurringExpense,
+  findAutoAppliedRecurringConflict,
   loadRecurringExpenses,
   saveRecurringExpense,
   saveRecurringThisAndFuture,
@@ -1070,6 +1072,9 @@ export default function Home() {
     }
   }
 
+  /** 저장 차단 시 사용자 안내 (정기 중복 등) */
+  const saveBlockMessageRef = useRef<string | null>(null);
+
   async function saveExpense(expense: {
     date: string;
     amount: number;
@@ -1077,11 +1082,26 @@ export default function Home() {
     category: string;
     subcategory: string;
   }): Promise<Expense | null> {
+    saveBlockMessageRef.current = null;
     const description = normalizeExpenseDescription(
       expense.description,
       expense.category,
       expense.subcategory,
     );
+
+    // 정기 자동 반영·동일 목록 중복 방지
+    const conflict = await findAutoAppliedRecurringConflict({
+      date: expense.date,
+      amount: expense.amount,
+      description,
+    });
+    if (conflict.conflict) {
+      const msg = conflict.message ?? AUTO_APPLIED_RECURRING_MESSAGE;
+      saveBlockMessageRef.current = msg;
+      setExpenseError(msg);
+      return null;
+    }
+
     const { data, error } = await supabase
       .from("expenses")
       .insert({
@@ -1514,7 +1534,10 @@ export default function Home() {
     setSaveToDateBusy(false);
 
     if (!saved) {
-      window.alert("다른 날짜로 저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      window.alert(
+        saveBlockMessageRef.current ??
+          "다른 날짜로 저장하지 못했어요. 잠시 후 다시 시도해 주세요.",
+      );
       return;
     }
 
@@ -1709,8 +1732,14 @@ export default function Home() {
     const saved = await saveExpense(expense);
     if (!saved) {
       pushAssistant(
-        "내용은 파악했지만 저장에 실패했어요. Supabase에 category 컬럼이 추가됐는지 확인해 주세요.",
+        saveBlockMessageRef.current ??
+          "내용은 파악했지만 저장에 실패했어요. Supabase에 category 컬럼이 추가됐는지 확인해 주세요.",
       );
+      // 정기 중복이면 대기 상태 해제
+      if (saveBlockMessageRef.current === AUTO_APPLIED_RECURRING_MESSAGE) {
+        setPendingExpense(null);
+        setPendingPhase(null);
+      }
       return;
     }
     const sourceId = expense.sourceMessageId ?? null;
@@ -2243,7 +2272,10 @@ export default function Home() {
     const saved = await saveExpense(payload);
     setManualSaveBusy(false);
     if (!saved) {
-      window.alert("저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      window.alert(
+        saveBlockMessageRef.current ??
+          "저장하지 못했어요. 잠시 후 다시 시도해 주세요.",
+      );
       return false;
     }
     setTab("chat");
@@ -2347,7 +2379,17 @@ export default function Home() {
             </div>
             <button
               type="button"
-              onClick={() => setPurchaseSheetOpen(true)}
+              onClick={() => {
+                setPurchaseSheetOpen(true);
+                // 열 때 예정일 지난 수동 정기 건에 [정기] 태깅
+                void (async () => {
+                  const applied = await applyDueRecurringExpenses(
+                    currentMonth || koreaToday().slice(0, 7),
+                  );
+                  if (applied.error) setRecurringError(applied.error);
+                  await loadExpenses();
+                })();
+              }}
               className="shrink-0 rounded-full bg-white px-3 py-1 text-[12px] font-medium text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
             >
               지출 내역
