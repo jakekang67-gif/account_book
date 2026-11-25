@@ -1,6 +1,6 @@
 import { koreaRecurringReflectDate, koreaToday } from "@/lib/date";
 import { normalizeExpenseDescription } from "@/lib/expenseDescription";
-import { monthKeyFromDate } from "@/lib/reports";
+import { isIncomeCategory, monthKeyFromDate } from "@/lib/reports";
 import { supabase } from "@/lib/supabase";
 
 /** 동시 호출 시 한 번만 실행 (중복 insert 방지) */
@@ -579,16 +579,23 @@ export async function applyDueRecurringExpenses(
   return applyDueInflight;
 }
 
+export type RecurringSummaryKind = "all" | "expense" | "income";
+
 /**
- * 해당 월 정기 지출 집계 (채팅용).
+ * 해당 월 정기 집계 (채팅용).
  * 예정일이 아직 도래하지 않은 항목은 제외 (오전 10시 기준).
+ * kind=expense: 수입·고정 수입 제외 / income: 수입만 / all: 전체
  */
 export function summarizeRecurringForMonth(
   rows: RecurringExpense[],
   monthKey: string,
   reflectDate = koreaRecurringReflectDate(),
+  kind: RecurringSummaryKind = "all",
 ) {
   const due = rows.filter((row) => {
+    const isIncome = isIncomeCategory(row.category);
+    if (kind === "expense" && isIncome) return false;
+    if (kind === "income" && !isIncome) return false;
     const months = dueMonthsForRecurring(
       row.start_date,
       row.interval_months,

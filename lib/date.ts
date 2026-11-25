@@ -59,3 +59,11 @@ export function koreaRecurringReflectDate(hour = koreaHour()) {
 export function isRecurringExpenseDescription(description: string) {
   return /^\[정기#\d+\]/.test(description.trim());
 }
+
+/**
+ * 목록·채팅 표시용: `[정기#12] 내용` → `[정기] 내용`
+ * (DB에는 #id를 유지해 중복 방지)
+ */
+export function formatRecurringDisplayDescription(description: string) {
+  return description.replace(/^\[정기#\d+\]\s*/u, "[정기] ").trim();
+}

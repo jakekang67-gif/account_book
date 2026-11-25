@@ -49,6 +49,7 @@ import {
 } from "@/lib/chatIntent";
 import { normalizeExpenseDescription } from "@/lib/expenseDescription";
 import {
+  formatRecurringDisplayDescription,
   isRecurringExpenseDescription,
   koreaRecurringReflectDate,
   koreaToday,
@@ -161,7 +162,8 @@ function formatSavedReply(expense: PendingExpense) {
   const monthDay =
     m && d ? `${Number(m)}월 ${Number(d)}일` : expense.date;
   // 예: 11월 29일 담배 10,000원을 "담배_담배"로 저장했어요.
-  return `${monthDay} ${expense.description} ${formatAmount(expense.amount)}원을 "${expense.category}_${expense.subcategory}"로 저장했어요.`;
+  const desc = formatRecurringDisplayDescription(expense.description);
+  return `${monthDay} ${desc} ${formatAmount(expense.amount)}원을 "${expense.category}_${expense.subcategory}"로 저장했어요.`;
 }
 
 function formatAskConfirmReply(expense: PendingExpense) {
@@ -169,7 +171,8 @@ function formatAskConfirmReply(expense: PendingExpense) {
   const monthDay =
     m && d ? `${Number(m)}월 ${Number(d)}일` : expense.date;
   // 예: 11월 20일 담배 10,000원을 "담배_담배"로 저장할까요?
-  return `${monthDay} ${expense.description} ${formatAmount(expense.amount)}원을 "${expense.category}_${expense.subcategory}"로 저장할까요?`;
+  const desc = formatRecurringDisplayDescription(expense.description);
+  return `${monthDay} ${desc} ${formatAmount(expense.amount)}원을 "${expense.category}_${expense.subcategory}"로 저장할까요?`;
 }
 
 /** 승인 의도 (네/응/저장, "응 저장" 등) */
@@ -1263,7 +1266,7 @@ export default function Home() {
   }
 
   async function handleDelete(item: Expense) {
-    const label = `${item.description} ${formatAmount(item.amount)}원`;
+    const label = `${formatRecurringDisplayDescription(item.description)} ${formatAmount(item.amount)}원`;
     if (!window.confirm(`"${label}" 내역을 삭제할까요?`)) {
       return;
     }
@@ -1990,7 +1993,13 @@ export default function Home() {
           return;
         }
         const monthKey = currentMonth || koreaToday().slice(0, 7);
-        const summary = summarizeRecurringForMonth(rows, monthKey);
+        // 지출만 (고정 수입·수입 제외). 항목명 나열 없이 대분류 합계만.
+        const summary = summarizeRecurringForMonth(
+          rows,
+          monthKey,
+          undefined,
+          "expense",
+        );
         if (summary.due.length === 0) {
           pushAssistant(
             `${formatMonthLabel(monthKey)}에 해당하는 정기 지출이 없어요.`,

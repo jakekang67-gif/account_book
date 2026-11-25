@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { NoAutofillInput } from "@/components/NoAutofillField";
+import { formatRecurringDisplayDescription } from "@/lib/date";
 
 export type PurchaseHistoryItem = {
   id: number;
@@ -54,6 +55,7 @@ export function PurchaseHistorySheet({
         : items.filter((item) => {
             const hay = [
               item.description,
+              formatRecurringDisplayDescription(item.description),
               item.date,
               item.category ?? "",
               item.subcategory ?? "",
@@ -235,7 +237,7 @@ export function PurchaseHistorySheet({
                   >
                     <div className="min-w-0 flex-1 leading-tight">
                       <p className="truncate text-[14px] font-medium text-[#1d1d1f]">
-                        {item.description}
+                        {formatRecurringDisplayDescription(item.description)}
                       </p>
                       <p className="text-[11px] text-[#86868b]">
                         {item.date}
