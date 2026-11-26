@@ -76,6 +76,7 @@ import {
   saveRecurringExpense,
   saveRecurringThisAndFuture,
   saveRecurringThisMonthOnly,
+  sumRecurringExpenseTemplates,
   summarizeTaggedRecurringExpenses,
   type RecurringExpense,
 } from "@/lib/recurringStore";
@@ -803,7 +804,23 @@ export default function Home() {
       const { rows, error } = await loadRecurringExpenses();
       if (cancelled || error) return;
 
-      const due = collectRecurringReminders(rows);
+      // 합계/완료/잔액용 — 지출 내역을 함께 읽어 채팅 통계와 같은 기준으로 맞춤
+      const { data: expenseData } = await supabase
+        .from("expenses")
+        .select("date, amount, category, subcategory, description");
+      if (cancelled) return;
+
+      const due = collectRecurringReminders(rows, {
+        expenses:
+          (expenseData as {
+            date: string;
+            amount: number;
+            category: string | null;
+            subcategory: string | null;
+            description: string;
+          }[]) ?? [],
+        reflectDate: koreaRecurringReflectDate(),
+      });
       if (due.length === 0) return;
 
       // 이미 허용된 경우만 시스템 알림 (권한 창은 정기 지출 메뉴에서 한 번만)
@@ -2098,23 +2115,27 @@ export default function Home() {
           categoryFilter,
           subcategoryFilter,
         );
-        const categories = allowedCategories
-          ? summary.categories.filter((c) => allowedCategories.has(c.category))
-          : summary.categories;
-        const total = allowedCategories
-          ? categories.reduce((sum, c) => sum + c.amount, 0)
+        const completed = allowedCategories
+          ? summary.categories
+              .filter((c) => allowedCategories.has(c.category))
+              .reduce((sum, c) => sum + c.amount, 0)
           : summary.total;
-        const count = categoryFilter
-          ? summary.count
-          : allowedCategories
-            ? categories.length
-            : summary.count;
+
+        // 합계 = 메뉴 정기 지출「총 합계」와 동일(활성 템플릿 합)
+        const templateLoad = await loadRecurringExpenses();
+        if (templateLoad.error) setRecurringError(templateLoad.error);
+        const planned = sumRecurringExpenseTemplates(templateLoad.rows, {
+          category: categoryFilter,
+          subcategory: subcategoryFilter,
+          allowedCategories,
+        }).total;
+        const remaining = Math.max(0, planned - completed);
 
         const filterLabel = subcategoryFilter
           ? `${categoryFilter}_${subcategoryFilter}`
           : categoryFilter;
 
-        if (count === 0 || (categoryFilter && total === 0)) {
+        if (planned === 0 && completed === 0) {
           pushAssistant(
             filterLabel
               ? `${formatMonthLabel(monthKey)} 「${filterLabel}」 정기 지출이 없어요.`
@@ -2123,24 +2144,17 @@ export default function Home() {
           return;
         }
 
-        if (categoryFilter) {
-          pushAssistant(
-            [
-              `${formatMonthLabel(monthKey)} ${filterLabel} 정기 지출`,
-              `합계 : ${formatAmount(total)}원`,
-            ].join("\n"),
-          );
-          return;
-        }
-
-        const lines = [
-          `${formatMonthLabel(monthKey)} 정기 지출`,
-          `합계 : ${formatAmount(total)}원`,
-          ...categories.map(
-            (c) => `${c.category} : ${formatAmount(c.amount)}원`,
-          ),
-        ];
-        pushAssistant(lines.join("\n"));
+        const title = filterLabel
+          ? `${formatMonthLabel(monthKey)} ${filterLabel} 정기 지출`
+          : `${formatMonthLabel(monthKey)} 정기 지출`;
+        pushAssistant(
+          [
+            title,
+            `- 합계 금액 : ${formatAmount(planned)}원`,
+            `- 지출 완료 : ${formatAmount(completed)}원`,
+            `- 지출 잔액 : ${formatAmount(remaining)}원`,
+          ].join("\n"),
+        );
         return;
       }
 
@@ -3174,7 +3188,7 @@ export default function Home() {
                   key={item.id}
                   type="button"
                   onClick={() => setTab(item.id)}
-                  className={`rounded-xl px-1 py-[0.43125rem] text-[11px] font-medium transition-colors sm:text-[12px] ${
+                  className={`rounded-xl px-1 py-[0.43125rem] text-[13px] font-medium transition-colors sm:text-[14px] ${
                     active
                       ? "bg-[#1d1d1f] text-white"
                       : "bg-transparent text-[#86868b]"

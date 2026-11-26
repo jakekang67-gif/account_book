@@ -24,3 +24,34 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
+
+/* 달력 월 전환 슬라이드 */
+@keyframes cal-slide-next {
+  from {
+    transform: translateX(28%);
+    opacity: 0.35;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes cal-slide-prev {
+  from {
+    transform: translateX(-28%);
+    opacity: 0.35;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.cal-slide-next {
+  animation: cal-slide-next 0.28s ease-out;
+}
+
+.cal-slide-prev {
+  animation: cal-slide-prev 0.28s ease-out;
+}

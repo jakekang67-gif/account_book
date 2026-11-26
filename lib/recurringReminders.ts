@@ -1,13 +1,17 @@
 import {
+  isRecurringExpenseDescription,
   koreaDateString,
   koreaHour,
+  koreaRecurringReflectDate,
   koreaToday,
   RECURRING_REFLECT_HOUR,
 } from "@/lib/date";
+import { formatMonthLabel } from "@/lib/reports";
 import {
   dueMonthsForRecurring,
   recurringDateForMonth,
-  summarizeRecurringForMonth,
+  sumRecurringExpenseTemplates,
+  summarizeTaggedRecurringExpenses,
   type RecurringExpense,
 } from "@/lib/recurringStore";
 
@@ -98,31 +102,106 @@ function isFixedIncomeRow(row: RecurringExpense) {
   return row.category === "고정 수입";
 }
 
-function remainingAfterItem(
-  rows: RecurringExpense[],
-  dueDate: string,
-  amount: number,
+function formatWon(n: number) {
+  return new Intl.NumberFormat("ko-KR").format(n);
+}
+
+type MonthProgress = {
+  planned: number;
+  completed: number;
+  remaining: number;
+};
+
+/** 채팅 통계와 동일: 합계(메뉴)=템플릿 합, 완료=10시 기준 반영분 */
+export function computeRecurringMonthProgress(
+  templates: RecurringExpense[],
+  expenses: Array<{
+    date: string;
+    amount: number;
+    category: string | null;
+    subcategory?: string | null;
+    description: string;
+  }>,
+  options?: {
+    monthKey?: string;
+    today?: string;
+    reflectDate?: string;
+    income?: boolean;
+  },
+): MonthProgress {
+  const today = options?.today ?? koreaToday();
+  const monthKey = options?.monthKey ?? today.slice(0, 7);
+  const reflect = options?.reflectDate ?? koreaRecurringReflectDate();
+  const income = options?.income === true;
+
+  const planned = income
+    ? templates
+        .filter((r) => r.active !== false && isFixedIncomeRow(r))
+        .reduce((sum, r) => sum + r.amount, 0)
+    : sumRecurringExpenseTemplates(templates).total;
+
+  const visible = expenses.filter((item) => {
+    if (item.date > today) return false;
+    if (
+      isRecurringExpenseDescription(item.description) &&
+      item.date > reflect
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  const completed = summarizeTaggedRecurringExpenses(
+    visible,
+    monthKey,
+    income ? "income" : "expense",
+  ).total;
+
+  return {
+    planned,
+    completed,
+    remaining: Math.max(0, planned - completed),
+  };
+}
+
+function formatProgressBlock(
+  monthKey: string,
   income: boolean,
+  progress: MonthProgress,
 ) {
-  const filtered = rows.filter((r) => isFixedIncomeRow(r) === income);
-  const summary = summarizeRecurringForMonth(filtered, dueDate.slice(0, 7));
-  return Math.max(0, summary.total - amount);
+  const kindLabel = income ? "정기 수입" : "정기 지출";
+  const doneLabel = income ? "수입 완료" : "지출 완료";
+  const remLabel = income ? "수입 잔액" : "지출 잔액";
+  return [
+    `${formatMonthLabel(monthKey)} ${kindLabel}`,
+    `- 합계 금액 : ${formatWon(progress.planned)}원`,
+    `- ${doneLabel} : ${formatWon(progress.completed)}원`,
+    `- ${remLabel} : ${formatWon(progress.remaining)}원`,
+  ].join("\n");
 }
 
 export function buildEveReminderMessage(
   row: RecurringExpense,
   dueDate: string,
-  remaining: number,
+  progress: MonthProgress,
 ) {
   const day = dayLabel(dueDate);
-  const kindLabel = isFixedIncomeRow(row) ? "정기 수입" : "정기 지출";
-  return `내일(${day}일) ${row.description} ${formatRecurringSpeechAmount(row.amount)} ${kindLabel}, 이번달 나머지 ${kindLabel} 금액은 ${new Intl.NumberFormat("ko-KR").format(remaining)}원`;
+  const income = isFixedIncomeRow(row);
+  const kindLabel = income ? "정기 수입" : "정기 지출";
+  const head = `내일(${day}일) ${row.description} ${formatRecurringSpeechAmount(row.amount)} ${kindLabel}`;
+  return `${head}\n\n${formatProgressBlock(dueDate.slice(0, 7), income, progress)}`;
 }
 
-export function buildDayReminderMessage(row: RecurringExpense, dueDate: string) {
+export function buildDayReminderMessage(
+  row: RecurringExpense,
+  dueDate: string,
+  progress: MonthProgress,
+) {
   const day = dayLabel(dueDate);
-  const kindLabel = isFixedIncomeRow(row) ? "정기 수입" : "정기 지출";
-  return `오늘(${day}일) ${row.description} ${formatRecurringSpeechAmount(row.amount)} ${kindLabel}`;
+  const income = isFixedIncomeRow(row);
+  const kindLabel = income ? "정기 수입" : "정기 지출";
+  const head = `오늘(${day}일) ${row.description} ${formatRecurringSpeechAmount(row.amount)} ${kindLabel}`;
+  return `${head}\n\n${formatProgressBlock(dueDate.slice(0, 7), income, progress)}`;
 }
 
 /**
@@ -131,7 +210,18 @@ export function buildDayReminderMessage(row: RecurringExpense, dueDate: string) 
  */
 export function collectRecurringReminders(
   rows: RecurringExpense[],
-  options?: { today?: string; hour?: number },
+  options?: {
+    today?: string;
+    hour?: number;
+    reflectDate?: string;
+    expenses?: Array<{
+      date: string;
+      amount: number;
+      category: string | null;
+      subcategory?: string | null;
+      description: string;
+    }>;
+  },
 ): RecurringReminder[] {
   const today = options?.today ?? koreaToday();
   const hour = options?.hour ?? koreaHour();
@@ -139,21 +229,34 @@ export function collectRecurringReminders(
 
   const tomorrow = koreaDateString(1);
   const active = rows.filter((r) => r.active !== false);
+  const expenses = options?.expenses ?? [];
+  const reflectDate = options?.reflectDate ?? koreaRecurringReflectDate();
+  const monthKey = today.slice(0, 7);
+
+  const expenseProgress = computeRecurringMonthProgress(active, expenses, {
+    monthKey,
+    today,
+    reflectDate,
+    income: false,
+  });
+  const incomeProgress = computeRecurringMonthProgress(active, expenses, {
+    monthKey,
+    today,
+    reflectDate,
+    income: true,
+  });
+
   const out: RecurringReminder[] = [];
 
   for (const row of active) {
+    const income = isFixedIncomeRow(row);
+    const progress = income ? incomeProgress : expenseProgress;
     if (isRecurringDueOnDate(row, tomorrow)) {
-      const remaining = remainingAfterItem(
-        active,
-        tomorrow,
-        row.amount,
-        isFixedIncomeRow(row),
-      );
       out.push({
         kind: "eve",
         row,
         dueDate: tomorrow,
-        message: buildEveReminderMessage(row, tomorrow, remaining),
+        message: buildEveReminderMessage(row, tomorrow, progress),
       });
     }
     if (isRecurringDueOnDate(row, today)) {
@@ -161,7 +264,7 @@ export function collectRecurringReminders(
         kind: "day",
         row,
         dueDate: today,
-        message: buildDayReminderMessage(row, today),
+        message: buildDayReminderMessage(row, today, progress),
       });
     }
   }

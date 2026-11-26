@@ -762,6 +762,38 @@ type TaggedExpenseLike = {
 };
 
 /**
+ * 메뉴 정기 지출「총 합계」와 같은 기준: 활성 정기 지출 템플릿 금액 합.
+ */
+export function sumRecurringExpenseTemplates(
+  templates: RecurringExpense[],
+  options?: {
+    category?: string | null;
+    subcategory?: string | null;
+    allowedCategories?: Set<string> | null;
+  },
+) {
+  let total = 0;
+  let count = 0;
+  for (const row of templates) {
+    if (!row.active) continue;
+    if (isIncomeCategory(row.category)) continue;
+    if (options?.category && row.category !== options.category) continue;
+    if (options?.subcategory && row.subcategory !== options.subcategory) {
+      continue;
+    }
+    if (
+      options?.allowedCategories &&
+      !options.allowedCategories.has(row.category)
+    ) {
+      continue;
+    }
+    total += row.amount;
+    count += 1;
+  }
+  return { total, count };
+}
+
+/**
  * 실제 지출 내역 중 `[정기…]` 태그가 붙은 건만 합산 (채팅「정기 지출 얼마」용).
  * 항목명 나열 없이 대분류 합계만 반환.
  * categoryFilter / subcategoryFilter 가 있으면 해당 분류만 합산.

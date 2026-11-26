@@ -93,13 +93,28 @@ export function CalendarMonthView({
   onMonthChange,
 }: CalendarMonthViewProps) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  /** 1=다음달(왼쪽 밀기), -1=이전달(오른쪽 밀기) */
+  const [slideDir, setSlideDir] = useState<1 | -1>(1);
+  const [slideAnimKey, setSlideAnimKey] = useState(0);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   /** 스와이프 직후 날짜 칸 click 오발 방지 */
   const suppressClickRef = useRef(false);
+  const animatingRef = useRef(false);
 
   useEffect(() => {
     setSelectedDate(null);
   }, [monthKey]);
+
+  function goMonth(delta: 1 | -1) {
+    if (animatingRef.current) return;
+    animatingRef.current = true;
+    setSlideDir(delta);
+    setSlideAnimKey((k) => k + 1);
+    onMonthChange(addMonthKey(monthKey, delta));
+    window.setTimeout(() => {
+      animatingRef.current = false;
+    }, 300);
+  }
 
   function onSwipeTouchStart(e: TouchEvent) {
     const t = e.changedTouches[0];
@@ -120,7 +135,7 @@ export function CalendarMonthView({
     if (Math.abs(dy) > Math.abs(dx) * 0.65) return;
     suppressClickRef.current = true;
     // 왼쪽으로 밀기(dx<0) → 다음 달, 오른쪽으로 밀기 → 이전 달
-    onMonthChange(addMonthKey(monthKey, dx < 0 ? 1 : -1));
+    goMonth(dx < 0 ? 1 : -1);
     window.setTimeout(() => {
       suppressClickRef.current = false;
     }, 350);
@@ -255,7 +270,7 @@ export function CalendarMonthView({
 
   return (
     <div
-      className="flex h-full min-h-0 flex-1 flex-col bg-white px-1.5 pb-2 pt-1.5"
+      className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white px-1.5 pb-2 pt-1.5"
       onTouchStart={onSwipeTouchStart}
       onTouchEnd={onSwipeTouchEnd}
     >
@@ -263,7 +278,7 @@ export function CalendarMonthView({
         <button
           type="button"
           aria-label="이전 달"
-          onClick={() => onMonthChange(addMonthKey(monthKey, -1))}
+          onClick={() => goMonth(-1)}
           className="px-2 py-1 text-[18px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
         >
           ‹
@@ -274,7 +289,7 @@ export function CalendarMonthView({
         <button
           type="button"
           aria-label="다음 달"
-          onClick={() => onMonthChange(addMonthKey(monthKey, 1))}
+          onClick={() => goMonth(1)}
           className="px-2 py-1 text-[18px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
         >
           ›
@@ -300,9 +315,16 @@ export function CalendarMonthView({
         ))}
       </div>
 
-      {/* flex-1 대신 약 72%만 써서 하단 안내 문구 공간을 확보 */}
+      {/* 월 전환 시 슬라이드 — flex-1 대신 약 72%로 하단 안내 공간 확보 */}
       <div
-        className="grid min-h-0 w-full flex-[0_0_72%] grid-cols-7 gap-px overflow-hidden border border-black/15 bg-black/15"
+        key={`${monthKey}-${slideAnimKey}`}
+        className={`grid min-h-0 w-full flex-[0_0_72%] grid-cols-7 gap-px overflow-hidden border border-black/15 bg-black/15 ${
+          slideAnimKey > 0
+            ? slideDir === 1
+              ? "cal-slide-next"
+              : "cal-slide-prev"
+            : ""
+        }`}
         style={gridStyle}
       >
         {WEEKDAYS.map((wd, i) => (

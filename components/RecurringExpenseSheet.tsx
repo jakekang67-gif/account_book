@@ -275,7 +275,7 @@ export function RecurringExpenseSheet({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          <p className="mb-3 text-[12px] leading-relaxed text-[#86868b]">
+          <p className="mb-3 text-[12px] leading-relaxed text-[#e53935]">
             {isIncome
               ? "주기마다 수입으로 자동 저장됩니다. 개월 수로 주기를 정하세요."
               : "주기마다 지출에 자동 저장됩니다. 개월 수로 주기를 정하세요."}
