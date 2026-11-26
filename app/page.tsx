@@ -2918,6 +2918,7 @@ export default function Home() {
                   <MonthlyBarChart
                     data={monthlyTabRows}
                     currentMonth={currentMonth}
+                    tone={monthlyKind === "expense" ? "expense" : "income"}
                   />
                 )}
                 <ul className="space-y-2">
