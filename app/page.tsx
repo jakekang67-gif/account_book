@@ -2488,7 +2488,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setBankBalanceOpen(true)}
-                  className="w-fit text-left text-[11px] tabular-nums text-[#4a6a8a] hover:underline"
+                  className="w-fit text-left text-[11px] tabular-nums text-[#4a6a8a] [font-feature-settings:'zero'_0] hover:underline"
                 >
                   통장{" "}
                   {formatAmount(

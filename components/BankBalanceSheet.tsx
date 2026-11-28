@@ -144,13 +144,13 @@ export function BankBalanceSheet({
                 </p>
               ) : (
                 <>
-                  <p className="mt-1 font-mono text-[1.75rem] font-medium tabular-nums tracking-tight text-[#1d1d1f]">
+                  <p className="mt-1 text-[28px] font-semibold tabular-nums tracking-tight text-[#1d1d1f] [font-feature-settings:'zero'_0]">
                     {formatWon(estimated)}
                     <span className="ml-1 text-sm font-normal text-[#86868b]">
                       원
                     </span>
                   </p>
-                  <p className="mt-2 text-[12px] text-[#86868b]">
+                  <p className="mt-2 text-[12px] tabular-nums text-[#86868b] [font-feature-settings:'zero'_0]">
                     기준 {formatWon(snapshot!.amount)}원 ·{" "}
                     {formatNotedAt(snapshot!.noted_at)} 이후 반영
                   </p>
