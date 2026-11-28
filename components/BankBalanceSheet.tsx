@@ -51,8 +51,9 @@ export function BankBalanceSheet({
       if (cancelled) return;
       if (loadError) {
         setError(
-          loadError.includes("balance_snapshots")
-            ? "balance_snapshots 테이블이 없습니다. supabase/create_balance_snapshots.sql 을 실행해 주세요."
+          loadError.includes("balance_snapshots") ||
+            loadError.includes("user_id")
+            ? "통장 잔액 테이블 설정이 필요합니다. supabase/enable_balance_snapshots_rls.sql 을 실행해 주세요."
             : loadError,
         );
         setSnapshot(null);

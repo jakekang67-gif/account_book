@@ -13,11 +13,19 @@ type ExpenseLike = {
   created_at: string;
 };
 
-/** 가장 최근 통장 잔액 기준 불러오기 */
+/** 가장 최근 통장 잔액 기준 불러오기 (RLS로 본인 데이터만) */
 export async function loadLatestBalanceSnapshot(): Promise<{
   snapshot: BalanceSnapshot | null;
   error: string | null;
 }> {
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return { snapshot: null, error: "로그인이 필요합니다." };
+  }
+
   const { data, error } = await supabase
     .from("balance_snapshots")
     .select("id, amount, noted_at")
@@ -45,9 +53,18 @@ export async function saveBalanceSnapshot(amount: number): Promise<{
     return { snapshot: null, error: "올바른 금액을 입력해 주세요." };
   }
 
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return { snapshot: null, error: "로그인이 필요합니다." };
+  }
+
   const { data, error } = await supabase
     .from("balance_snapshots")
     .insert({
+      user_id: user.id,
       amount: rounded,
       noted_at: new Date().toISOString(),
     })
