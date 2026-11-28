@@ -169,7 +169,7 @@ function formatProgressBlock(
   income: boolean,
   progress: MonthProgress,
 ) {
-  const kindLabel = income ? "정기 수입" : "정기 지출";
+  const kindLabel = income ? "고정 수입" : "고정 지출";
   const doneLabel = income ? "수입 완료" : "지출 완료";
   const remLabel = income ? "수입 잔액" : "지출 잔액";
   return [
@@ -187,7 +187,7 @@ export function buildEveReminderMessage(
 ) {
   const day = dayLabel(dueDate);
   const income = isFixedIncomeRow(row);
-  const kindLabel = income ? "정기 수입" : "정기 지출";
+  const kindLabel = income ? "고정 수입" : "고정 지출";
   const head = `내일(${day}일) ${row.description} ${formatRecurringSpeechAmount(row.amount)} ${kindLabel}`;
   return `${head}\n\n${formatProgressBlock(dueDate.slice(0, 7), income, progress)}`;
 }
@@ -199,7 +199,7 @@ export function buildDayReminderMessage(
 ) {
   const day = dayLabel(dueDate);
   const income = isFixedIncomeRow(row);
-  const kindLabel = income ? "정기 수입" : "정기 지출";
+  const kindLabel = income ? "고정 수입" : "고정 지출";
   const head = `오늘(${day}일) ${row.description} ${formatRecurringSpeechAmount(row.amount)} ${kindLabel}`;
   return `${head}\n\n${formatProgressBlock(dueDate.slice(0, 7), income, progress)}`;
 }
@@ -325,7 +325,7 @@ export async function showRecurringNotification(
   if (typeof window === "undefined" || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
 
-  const title = options?.isIncome ? "정기 수입 알림" : "정기 지출 알림";
+  const title = options?.isIncome ? "고정 수입 알림" : "고정 지출 알림";
   try {
     if ("serviceWorker" in navigator) {
       const reg = await navigator.serviceWorker.ready;

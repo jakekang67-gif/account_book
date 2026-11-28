@@ -4,11 +4,11 @@
 
 export type ChatIntent = "expense" | "stats" | "chat_cleanup" | "recurring_stats";
 
-/** 정기 지출 조회 */
+/** 고정(정기) 지출 조회 — 「고정」「정기」 모두 인식 */
 export function looksLikeRecurringStats(text: string) {
   const t = text.trim();
   if (!t || hasExpenseAmount(t)) return false;
-  return /정기\s*지출|정기지출/.test(t);
+  return /정기\s*지출|정기지출|고정\s*지출|고정지출/.test(t);
 }
 
 /** 금액이 포함되어 있으면 지출 입력으로 봅니다. */

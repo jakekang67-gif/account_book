@@ -118,7 +118,7 @@ function ResultTable({
       </table>
 
       <p className="mt-3 text-[12px] leading-relaxed text-[#86868b]">
-        수입은 정기 수입·일반 수입을 합산한 금액입니다.
+        수입은 고정 수입·일반 수입을 합산한 금액입니다.
         {!hasIncome && " 이번 달 수입 내역이 없어 지출을 마이너스로 표시합니다."}
       </p>
     </>

@@ -46,7 +46,7 @@ const KIND_LABEL: Record<CalendarKind, string> = {
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"] as const;
 
-/** 가로 스와이프로 달 넘김 (px). 세로 스크롤과 구분 */
+/** 가로 스와이프로 달·일 넘김 (px). 세로 스크롤과 구분 */
 const SWIPE_MIN_DX = 56;
 
 type CalendarMonthViewProps = {
@@ -59,6 +59,16 @@ function addMonthKey(monthKey: string, delta: number) {
   const [y, m] = monthKey.split("-").map(Number);
   const d = new Date(y, m - 1 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** YYYY-MM-DD 에 일수 더하기 */
+function addDays(date: string, delta: number) {
+  const [y, m, d] = date.split("-").map(Number);
+  const next = new Date(y, m - 1, d + delta);
+  const yy = next.getFullYear();
+  const mm = String(next.getMonth() + 1).padStart(2, "0");
+  const dd = String(next.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
 }
 
 function formatAmountShort(amount: number) {
@@ -74,7 +84,8 @@ function classifyKind(item: CalendarExpenseItem): CalendarKind {
 
 function displayName(item: CalendarExpenseItem) {
   const raw = formatRecurringDisplayDescription(item.description);
-  return raw.replace(/^\[정기\]\s*/u, "").trim() || raw;
+  // 표시용 [고정] 접두 제거 (본문만)
+  return raw.replace(/^\[고정\]\s*/u, "").replace(/^\[정기\]\s*/u, "").trim() || raw;
 }
 
 function displayLabel(item: CalendarExpenseItem) {
@@ -93,15 +104,22 @@ export function CalendarMonthView({
   onMonthChange,
 }: CalendarMonthViewProps) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  /** 1=다음달(왼쪽 밀기), -1=이전달(오른쪽 밀기) */
+  /** 1=다음(왼쪽 밀기), -1=이전(오른쪽 밀기) */
   const [slideDir, setSlideDir] = useState<1 | -1>(1);
   const [slideAnimKey, setSlideAnimKey] = useState(0);
+  const [daySlideAnimKey, setDaySlideAnimKey] = useState(0);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   /** 스와이프 직후 날짜 칸 click 오발 방지 */
   const suppressClickRef = useRef(false);
   const animatingRef = useRef(false);
+  /** 일 이동으로 달이 바뀔 때 selectedDate 유지 */
+  const keepDayOnMonthChangeRef = useRef(false);
 
   useEffect(() => {
+    if (keepDayOnMonthChangeRef.current) {
+      keepDayOnMonthChangeRef.current = false;
+      return;
+    }
     setSelectedDate(null);
   }, [monthKey]);
 
@@ -116,13 +134,30 @@ export function CalendarMonthView({
     }, 300);
   }
 
+  function goDay(delta: 1 | -1) {
+    if (!selectedDate || animatingRef.current) return;
+    animatingRef.current = true;
+    setSlideDir(delta);
+    setDaySlideAnimKey((k) => k + 1);
+    const next = addDays(selectedDate, delta);
+    const nextMonth = next.slice(0, 7);
+    if (nextMonth !== monthKey) {
+      keepDayOnMonthChangeRef.current = true;
+      onMonthChange(nextMonth);
+    }
+    setSelectedDate(next);
+    window.setTimeout(() => {
+      animatingRef.current = false;
+    }, 300);
+  }
+
   function onSwipeTouchStart(e: TouchEvent) {
     const t = e.changedTouches[0];
     if (!t) return;
     touchStartRef.current = { x: t.clientX, y: t.clientY };
   }
 
-  function onSwipeTouchEnd(e: TouchEvent) {
+  function onSwipeTouchEnd(e: TouchEvent, mode: "month" | "day") {
     const start = touchStartRef.current;
     touchStartRef.current = null;
     if (!start) return;
@@ -131,11 +166,11 @@ export function CalendarMonthView({
     const dx = t.clientX - start.x;
     const dy = t.clientY - start.y;
     if (Math.abs(dx) < SWIPE_MIN_DX) return;
-    // 세로 움직임이 더 크면 스크롤로 보고 무시
     if (Math.abs(dy) > Math.abs(dx) * 0.65) return;
     suppressClickRef.current = true;
-    // 왼쪽으로 밀기(dx<0) → 다음 달, 오른쪽으로 밀기 → 이전 달
-    goMonth(dx < 0 ? 1 : -1);
+    const dir: 1 | -1 = dx < 0 ? 1 : -1;
+    if (mode === "day") goDay(dir);
+    else goMonth(dir);
     window.setTimeout(() => {
       suppressClickRef.current = false;
     }, 350);
@@ -160,10 +195,30 @@ export function CalendarMonthView({
     return map;
   }, [items, monthKey]);
 
+  /** 선택일이 다른 달로 넘어가도 합계용으로 전체 items에서 조회 */
+  const detailItems = useMemo(() => {
+    if (!selectedDate) return [];
+    return items
+      .filter((item) => item.date === selectedDate)
+      .sort((a, b) => a.id - b.id);
+  }, [items, selectedDate]);
+
+  const dayExpenseTotal = useMemo(() => {
+    return detailItems
+      .filter((item) => !isIncomeCategory(item.category))
+      .reduce((sum, item) => sum + item.amount, 0);
+  }, [detailItems]);
+
+  const dayIncomeTotal = useMemo(() => {
+    return detailItems
+      .filter((item) => isIncomeCategory(item.category))
+      .reduce((sum, item) => sum + item.amount, 0);
+  }, [detailItems]);
+
   const cells = useMemo(() => {
     const [y, m] = monthKey.split("-").map(Number);
     const first = new Date(y, m - 1, 1);
-    const startPad = first.getDay(); // 0=일
+    const startPad = first.getDay();
     const daysInMonth = new Date(y, m, 0).getDate();
     const total = Math.ceil((startPad + daysInMonth) / 7) * 7;
     const out: ({ day: number; date: string } | null)[] = [];
@@ -185,44 +240,90 @@ export function CalendarMonthView({
     gridTemplateRows: `auto repeat(${weekCount}, minmax(0, 1fr))`,
   } satisfies CSSProperties;
 
-  const detailItems = selectedDate ? (byDate.get(selectedDate) ?? []) : [];
-
   if (selectedDate) {
     return (
-      <div className="flex h-full min-h-0 flex-1 flex-col bg-white px-3 pb-3 pt-2">
+      <div
+        className="flex h-full min-h-0 flex-1 flex-col bg-white px-3 pb-3 pt-2"
+        onTouchStart={onSwipeTouchStart}
+        onTouchEnd={(e) => onSwipeTouchEnd(e, "day")}
+      >
         <div className="mb-2 flex shrink-0 items-center justify-between gap-2 border-b border-black/5 pb-2">
-          <h2 className="text-[16px] font-semibold text-[#1d1d1f]">
-            {formatDayTitle(selectedDate)} 내역
-          </h2>
+          <button
+            type="button"
+            aria-label="이전 날"
+            onClick={() => goDay(-1)}
+            className="px-2 py-1 text-[18px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
+          >
+            ‹
+          </button>
+          <div className="min-w-0 flex-1 text-center">
+            <h2 className="text-[16px] font-semibold text-[#1d1d1f]">
+              {formatDayTitle(selectedDate)} 내역
+            </h2>
+            <p className="mt-0.5 text-[12px] tabular-nums text-[#86868b]">
+              총지출{" "}
+              <span className="font-medium text-[#e53935]">
+                {formatAmountShort(dayExpenseTotal)}원
+              </span>
+              {dayIncomeTotal > 0 && (
+                <>
+                  {" · "}
+                  수입{" "}
+                  <span className="font-medium text-[#43a047]">
+                    {formatAmountShort(dayIncomeTotal)}원
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="다음 날"
+            onClick={() => goDay(1)}
+            className="px-2 py-1 text-[18px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
+          >
+            ›
+          </button>
+        </div>
+
+        <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            {(
+              [
+                "expense",
+                "fixed-expense",
+                "income",
+                "fixed-income",
+              ] as const
+            ).map((kind) => (
+              <span
+                key={kind}
+                className="px-1.5 py-0.5 text-[10px] font-medium text-white"
+                style={{ backgroundColor: KIND_COLOR[kind] }}
+              >
+                {KIND_LABEL[kind]}
+              </span>
+            ))}
+          </div>
           <button
             type="button"
             onClick={() => setSelectedDate(null)}
-            className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-[#86868b] hover:bg-[#f5f5f7]"
+            className="shrink-0 rounded-lg px-3 py-1.5 text-[13px] font-medium text-[#86868b] hover:bg-[#f5f5f7]"
           >
             닫기
           </button>
         </div>
 
-        <div className="mb-2 flex shrink-0 flex-wrap gap-1.5">
-          {(
-            [
-              "expense",
-              "fixed-expense",
-              "income",
-              "fixed-income",
-            ] as const
-          ).map((kind) => (
-            <span
-              key={kind}
-              className="px-1.5 py-0.5 text-[10px] font-medium text-white"
-              style={{ backgroundColor: KIND_COLOR[kind] }}
-            >
-              {KIND_LABEL[kind]}
-            </span>
-          ))}
-        </div>
-
-        <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
+        <ul
+          key={`${selectedDate}-${daySlideAnimKey}`}
+          className={`min-h-0 flex-1 space-y-1.5 overflow-y-auto ${
+            daySlideAnimKey > 0
+              ? slideDir === 1
+                ? "cal-slide-next"
+                : "cal-slide-prev"
+              : ""
+          }`}
+        >
           {detailItems.length === 0 ? (
             <li className="rounded-xl bg-[#f5f5f7] px-3 py-6 text-center text-[13px] text-[#86868b]">
               이 날짜에 저장된 내역이 없습니다.
@@ -264,6 +365,10 @@ export function CalendarMonthView({
             })
           )}
         </ul>
+
+        <p className="mt-2 shrink-0 text-center text-[11px] text-[#86868b]">
+          좌우로 밀면 이전·다음 날로 이동합니다.
+        </p>
       </div>
     );
   }
@@ -272,7 +377,7 @@ export function CalendarMonthView({
     <div
       className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white px-1.5 pb-2 pt-1.5"
       onTouchStart={onSwipeTouchStart}
-      onTouchEnd={onSwipeTouchEnd}
+      onTouchEnd={(e) => onSwipeTouchEnd(e, "month")}
     >
       <div className="mb-1 flex shrink-0 items-center justify-between gap-2 px-0.5">
         <button
@@ -315,7 +420,6 @@ export function CalendarMonthView({
         ))}
       </div>
 
-      {/* 월 전환 시 슬라이드 — flex-1 대신 약 72%로 하단 안내 공간 확보 */}
       <div
         key={`${monthKey}-${slideAnimKey}`}
         className={`grid min-h-0 w-full flex-[0_0_72%] grid-cols-7 gap-px overflow-hidden border border-black/15 bg-black/15 ${
@@ -347,7 +451,6 @@ export function CalendarMonthView({
           }
           const weekday = idx % 7;
           const holiday = isKoreanHoliday(cell.date);
-          // 일요일·공휴일 적색, 토요일 청색, 그 외 검정
           const dayColor =
             weekday === 0 || holiday
               ? "#e53935"

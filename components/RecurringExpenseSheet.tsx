@@ -38,7 +38,7 @@ type RecurringExpenseSheetProps = {
   rows: RecurringExpense[];
   categoryTree: CategoryTree;
   categoryRows?: CategoryItemRow[];
-  /** expense=정기 지출, income=정기 수입 */
+  /** expense=고정 지출, income=고정 수입 */
   mode?: "expense" | "income";
   loading?: boolean;
   error?: string | null;
@@ -56,7 +56,7 @@ function formatAmount(n: number) {
 const fieldClass =
   "w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[14px] text-[#1d1d1f] outline-none focus:bg-[#ebebed]";
 
-/** 정기 지출·정기 수입 목록·추가·수정·삭제 */
+/** 고정 지출·고정 수입 목록·추가·수정·삭제 */
 export function RecurringExpenseSheet({
   open,
   rows,
@@ -72,7 +72,7 @@ export function RecurringExpenseSheet({
   onDelete,
 }: RecurringExpenseSheetProps) {
   const isIncome = mode === "income";
-  const title = isIncome ? "정기 수입" : "정기 지출";
+  const title = isIncome ? "고정 수입" : "고정 지출";
   const categories = isIncome
     ? [FIXED_INCOME_CATEGORY]
     : Object.keys(categoryTree).filter(

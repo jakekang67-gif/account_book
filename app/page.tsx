@@ -3,6 +3,12 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AppLockScreen } from "@/components/AppLockScreen";
 import { AppMenu } from "@/components/AppMenu";
+import { BankBalanceSheet } from "@/components/BankBalanceSheet";
+import {
+  estimateBalance,
+  loadLatestBalanceSnapshot,
+  type BalanceSnapshot,
+} from "@/lib/balanceStore";
 import {
   hasAppLockPin,
   isAppLockUnlocked,
@@ -410,6 +416,9 @@ export default function Home() {
   /** 콜드 스타트 시에만 환영 안내 (세션 내 앱 전환 시 재표시 안 함) */
   const [showWelcomeTip, setShowWelcomeTip] = useState(false);
   const [purchaseSheetOpen, setPurchaseSheetOpen] = useState(false);
+  const [bankBalanceOpen, setBankBalanceOpen] = useState(false);
+  const [balanceSnapshot, setBalanceSnapshot] =
+    useState<BalanceSnapshot | null>(null);
   const [chatSelectMode, setChatSelectMode] = useState(false);
   const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
   /** 길게 눌러 단일 삭제·수정 대상 */
@@ -705,6 +714,7 @@ export default function Home() {
       setCategoryTree(DEFAULT_CATEGORY_TREE);
       setLoadingExpenses(false);
       setCategoryLoadError(null);
+      setBalanceSnapshot(null);
       chatDraftReadyRef.current = false;
       setMessages([WELCOME_MESSAGE]);
       setPendingExpense(null);
@@ -719,6 +729,10 @@ export default function Home() {
     void refreshCategories();
     // 정기 반영은 recurringReflectDate effect에서만 수행 (중복 실행·중복 insert 방지)
     void loadExpenses();
+    void (async () => {
+      const { snapshot } = await loadLatestBalanceSnapshot();
+      setBalanceSnapshot(snapshot);
+    })();
 
     // 로그인 사용자별 채팅 초안 복구
     chatDraftReadyRef.current = false;
@@ -2069,7 +2083,7 @@ export default function Home() {
           .lte("date", `${monthKey}-31`);
         if (freshError) {
           pushAssistant(
-            `정기 지출을 불러오지 못했어요. (${freshError.message})`,
+            `고정 지출을 불러오지 못했어요. (${freshError.message})`,
           );
           return;
         }
@@ -2138,15 +2152,15 @@ export default function Home() {
         if (planned === 0 && completed === 0) {
           pushAssistant(
             filterLabel
-              ? `${formatMonthLabel(monthKey)} 「${filterLabel}」 정기 지출이 없어요.`
-              : `${formatMonthLabel(monthKey)}에 해당하는 정기 지출이 없어요.`,
+              ? `${formatMonthLabel(monthKey)} 「${filterLabel}」 고정 지출이 없어요.`
+              : `${formatMonthLabel(monthKey)}에 해당하는 고정 지출이 없어요.`,
           );
           return;
         }
 
         const title = filterLabel
-          ? `${formatMonthLabel(monthKey)} ${filterLabel} 정기 지출`
-          : `${formatMonthLabel(monthKey)} 정기 지출`;
+          ? `${formatMonthLabel(monthKey)} ${filterLabel} 고정 지출`
+          : `${formatMonthLabel(monthKey)} 고정 지출`;
         pushAssistant(
           [
             title,
@@ -2426,6 +2440,7 @@ export default function Home() {
               onOpenCategoryEditor={() => setCategoryEditorOpen(true)}
               onOpenRecurring={() => void openRecurringSheet()}
               onOpenRecurringIncome={() => void openRecurringIncomeSheet()}
+              onOpenBankBalance={() => setBankBalanceOpen(true)}
               onOpenInstallHelp={() => setInstallHelpOpen(true)}
               onOpenChatCleanup={() => setChatCleanupOpen(true)}
               onOpenChatNotice={() => {
@@ -2457,16 +2472,31 @@ export default function Home() {
         {/* 지출 합계 + 지출 내역 (목록은 시트에서) */}
         <section className="shrink-0 border-b border-[#9ec0e8] bg-[#d4e8ff] px-3 py-2">
           <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
-            <div className="flex min-w-0 items-baseline gap-2">
-              <p className="text-[12px] font-medium text-[#4a6a8a]">
-                {currentMonth
-                  ? `${formatMonthLabel(currentMonth)} 지출`
-                  : "지출 내역"}
-              </p>
-              <p className="text-[12px] tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
-                합계 {formatAmount(total)}
-                <span className="ml-0.5 text-[#86868b]">원</span>
-              </p>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <div className="flex min-w-0 items-baseline gap-2">
+                <p className="text-[12px] font-medium text-[#4a6a8a]">
+                  {currentMonth
+                    ? `${formatMonthLabel(currentMonth)} 지출`
+                    : "지출 내역"}
+                </p>
+                <p className="text-[12px] tabular-nums text-[#1d1d1f] [font-feature-settings:'zero'_0]">
+                  합계 {formatAmount(total)}
+                  <span className="ml-0.5 text-[#86868b]">원</span>
+                </p>
+              </div>
+              {balanceSnapshot && (
+                <button
+                  type="button"
+                  onClick={() => setBankBalanceOpen(true)}
+                  className="w-fit text-left text-[11px] tabular-nums text-[#4a6a8a] hover:underline"
+                >
+                  통장{" "}
+                  {formatAmount(
+                    estimateBalance(balanceSnapshot, occurredExpenses),
+                  )}
+                  원
+                </button>
+              )}
             </div>
             <button
               type="button"
@@ -3214,6 +3244,13 @@ export default function Home() {
       <InstallHelp
         open={installHelpOpen}
         onClose={() => setInstallHelpOpen(false)}
+      />
+
+      <BankBalanceSheet
+        open={bankBalanceOpen}
+        onClose={() => setBankBalanceOpen(false)}
+        expenses={occurredExpenses}
+        onSnapshotChange={setBalanceSnapshot}
       />
 
       <SaveExpenseToDateDialog

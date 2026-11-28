@@ -34,7 +34,7 @@ function norm(s: string) {
 export function statsQueryCore(text: string) {
   return norm(text)
     .replace(
-      /(총\s*)?지출|정기|얼마|얼마나|합계|알려줘|알려\s*줘|보여줘|보여\s*줘|이번\s*달|저번\s*달|지난\s*달|\?|？/g,
+      /(총\s*)?지출|정기|고정|얼마|얼마나|합계|알려줘|알려\s*줘|보여줘|보여\s*줘|이번\s*달|저번\s*달|지난\s*달|\?|？/g,
       "",
     )
     .replace(/(야|에요|예요|인가요|인가|지)$/g, "")

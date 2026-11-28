@@ -46,21 +46,21 @@ const INCOME_MONTH_FILLS = [
   "#277da1",
 ] as const;
 
-/** 지출: 적색·분홍 계열 */
-const EXPENSE_CURRENT_FILL = "#e53935";
+/** 지출: 연한 분홍 계열 (덜 공격적) */
+const EXPENSE_CURRENT_FILL = "#f48fb1";
 const EXPENSE_MONTH_FILLS = [
-  "#ffcdd2",
-  "#ef9a9a",
-  "#e57373",
-  "#ef5350",
-  "#f44336",
-  "#e53935",
-  "#d32f2f",
-  "#c62828",
-  "#ff8a80",
-  "#ff5252",
-  "#ec407a",
+  "#fce4ec",
+  "#f8bbd0",
+  "#f48fb1",
   "#f06292",
+  "#ec407a",
+  "#e91e63",
+  "#f8bbd0",
+  "#f48fb1",
+  "#f06292",
+  "#fce4ec",
+  "#f8bbd0",
+  "#f48fb1",
 ] as const;
 
 function fillForMonth(

@@ -61,12 +61,13 @@ export function isRecurringExpenseDescription(description: string) {
 }
 
 /**
- * 목록·채팅 표시용: `[정기#12] 내용` → `[정기] 내용`
- * (DB에는 #id를 유지해 중복 방지)
+ * 목록·채팅 표시용: `[정기#12] 내용` → `[고정] 내용`
+ * (DB 마커는 `[정기#id]` 유지 — 표시만 「고정」)
  */
 export function formatRecurringDisplayDescription(description: string) {
   return description
-    .replace(/^\[정기#\d+\]\s*/u, "[정기] ")
-    .replace(/^\[정기\]\s*/u, "[정기] ")
+    .replace(/^\[정기#\d+\]\s*/u, "[고정] ")
+    .replace(/^\[정기\]\s*/u, "[고정] ")
+    .replace(/^\[고정\]\s*/u, "[고정] ")
     .trim();
 }
